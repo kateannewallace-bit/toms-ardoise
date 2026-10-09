@@ -1,7 +1,9 @@
 /* Vocabulary. One word per line: French (with its article) | English | picture.
    A picture is an emoji, c:#hex for a color swatch, or s:name for a drawn shape.
    Words are taught in sets of 6, in the order written here, so put the easiest first.
-   Action words have a fourth part: the "il/elle" form used in "Qui nage ?" */
+   Action words have two more parts: the "il" form ("Qui nage ?", answered "Il nage.") and the command for "Jacques a dit : nage !".
+   The infinitive is kept only as a note for grown-ups; children meet it inside phrases like "Je veux nager".
+   Feelings that change for a girl have an f= part: "je suis content … f=je suis contente". */
 
 // How each topic asks for a word: 'ou' → "Où est le chat ?", 'qui' → "Qui dit « merci » ?", 'fait' → "Qui nage ?"
 const TOPICS = [
@@ -110,7 +112,7 @@ le biscuit|biscuit|🍪
 les frites|chips|🍟
 le maïs|corn|🌽` },
 
-  { id: 'corps', fr: 'Le corps', en: 'The body', ask: 'ou', words: `
+  { id: 'corps', fr: 'Le corps', en: 'The body', ask: 'ou', jacques: true, words: `
 le nez|nose|👃
 la bouche|mouth|👄
 l'œil|eye|👁️
@@ -256,41 +258,41 @@ la baguette magique|magic wand|🪄
 le génie|genie|🧞` },
 
   { id: 'emotions', fr: 'Comment ça va ?', en: 'Feelings', ask: 'qui', sayAsk: 'Comment ça va ?', words: `
-je suis content|I'm happy|😊
+je suis content|I'm happy|😊|f=je suis contente
 je suis triste|I'm sad|😢
-je suis fâché|I'm cross|😠
-je suis fatigué|I'm tired|🥱
+je suis fâché|I'm cross|😠|f=je suis fâchée
+je suis fatigué|I'm tired|🥱|f=je suis fatiguée
 j'ai peur|I'm scared|😱
 j'ai froid|I'm cold|🥶
 j'ai chaud|I'm hot|🥵
 j'ai faim|I'm hungry|🤤
 j'ai soif|I'm thirsty|🥤
 je suis malade|I'm ill|🤒
-je suis surpris|I'm surprised|😮
+je suis surpris|I'm surprised|😮|f=je suis surprise
 je rigole|I'm laughing|😂` },
 
-  { id: 'actions', fr: 'Les actions', en: 'Action words', ask: 'fait', sayAsk: "Qu'est-ce qu'il fait ?", words: `
-courir|run|🏃|court
-nager|swim|🏊|nage
-danser|dance|💃|danse
-chanter|sing|🎤|chante
-dormir|sleep|😴|dort
-manger|eat|😋🍴|mange
-boire|drink|🥤|boit
-lire|read|📖|lit
-dessiner|draw|🎨|dessine
-sauter|jump|🤸|saute
-marcher|walk|🚶|marche
-pleurer|cry|😭|pleure
-rire|laugh|😂|rit
-grimper|climb|🧗|grimpe
-cuisiner|cook|🧑‍🍳|cuisine
-écrire|write|✍️|écrit
-faire du vélo|ride a bike|🚴|fait du vélo
-jouer|play|🤹|joue` },
+  { id: 'actions', fr: 'Les actions', en: 'Action words', ask: 'fait', sayAsk: "Qu'est-ce qu'il fait ?", jacques: true, words: `
+courir|run|🏃|court|cours
+nager|swim|🏊|nage|nage
+danser|dance|🕺|danse|danse
+chanter|sing|🎤|chante|chante
+dormir|sleep|😴|dort|dors
+manger|eat|😋🍴|mange|mange
+boire|drink|🥤|boit|bois
+lire|read|📖|lit|lis
+dessiner|draw|🎨|dessine|dessine
+sauter|jump|🤸|saute|saute
+marcher|walk|🚶|marche|marche
+pleurer|cry|😭|pleure|pleure
+rire|laugh|😂|rit|ris
+grimper|climb|🧗|grimpe|grimpe
+cuisiner|cook|🧑‍🍳|cuisine|cuisine
+écrire|write|✍️|écrit|écris
+faire du vélo|ride a bike|🚴|fait du vélo|fais du vélo
+jouer|play|🤹|joue|joue` },
 
   { id: 'phrases', fr: 'Petites phrases', en: 'Little sentences', phrases: true,
-    levels: ['Couleur + forme (une étoile verte)', 'Combien ? (trois chats)', 'Qui mange quoi ?', 'Dans, sur, sous, à côté'] },
+    levels: ['Couleur + forme (une étoile verte)', 'Combien ? (trois chats)', 'Qui mange quoi ?', 'Dans, sur, sous, à côté', 'Je veux… On va… (je veux nager)'] },
 
   { id: 'saison', fr: 'Ce mois-ci', en: 'This month', ask: 'ou', seasonal: true },
 
@@ -445,6 +447,7 @@ const CHEERS = [
    type: what kind of reply it is. Wrong choices are always replies of another type, so only one picture answers the question.
    ask: a turn where the child asks the question (hint is for the grown-up); answer: what the character says back.
    {name} and {age} become the child's name and age; {sib} is the brother or sister they play with, {big} an older one at home and {far} one who lives away (set on the grown-ups page).
+   {le chevalier/la chevalière}: the first for a boy, the second for a girl (from the child's picture).
    who: '{sib}' means the playmate's own picture. pitch: how high the character's voice is. */
 const SCENES = [
   { title: 'Bonjour, Renart !', who: '🦊', pitch: 1.3, steps: [
@@ -482,7 +485,8 @@ const SCENES = [
     { them: 'Coucou {name} ! Tu as bien dormi ?', you: "Oui, j'ai bien dormi !", pic: '😴👍', en: 'Yes, I slept well!', type: 'slept' },
     { ask: "Tu peux m'aider, s'il te plaît ?", hint: 'Ask {big} for help.', pic: '❓🙏', en: 'Can you help me, please?', answer: 'Bien sûr ! Avec quoi ?', type: 'askhelp' },
     { them: 'Tes chaussures ?', you: 'Oui, mes chaussures !', pic: '👟👍', en: 'Yes, my shoes!', type: 'shoes' },
-    { them: 'Voilà ! On va au parc ?', you: 'Oui, on y va !', pic: '🌳🏃', en: "Yes, let's go!", type: 'go' },
+    { them: "Voilà ! Qu'est-ce que tu veux faire ?", you: 'Je veux aller au parc !', pic: '🙋🌳', en: 'I want to go to the park!', type: 'wantdo' },
+    { them: 'On va faire du vélo ?', you: "Oui ! J'adore faire du vélo !", pic: '🚲😍', en: 'Yes! I love riding my bike!', type: 'lovedo' },
   ] },
   { title: 'À la boulangerie', who: '👩‍🍳', pitch: 1.1, steps: [
     { them: "Bonjour ! Qu'est-ce que tu veux ?", you: "Un croissant, s'il vous plaît.", pic: '🥐🙏', en: 'A croissant, please.', type: 'order' },
@@ -515,7 +519,7 @@ const SCENES = [
     { them: 'Tu me manques !', you: 'Toi aussi, tu me manques ! Bisous !', pic: '🥺❤️', en: 'I miss you too! Kisses!', type: 'miss' },
   ] },
   { title: 'Le dragon', who: '🐉', pitch: 0.5, steps: [
-    { them: 'Grrr ! Qui es-tu ?', you: 'Je suis {name}, le chevalier !', pic: '🤺📛', en: "I'm {name} the knight!", type: 'name' },
+    { them: 'Grrr ! Qui es-tu ?', you: 'Je suis {name}, {le chevalier/la chevalière} !', pic: '🤺📛', en: "I'm {name} the knight!", type: 'name' },
     { them: 'Tu as peur ?', you: "Non, je n'ai pas peur !", pic: '💪😤', en: "No, I'm not scared!", type: 'brave' },
     { them: 'Tu veux un gâteau ?', you: 'Oui, merci, dragon !', pic: '🎂🙏', en: 'Yes, thank you, dragon!', type: 'yesplease' },
     { ask: 'Tu veux être mon ami ?', hint: 'Ask the dragon to be your friend.', pic: '❓🤝', en: 'Do you want to be my friend?', answer: 'Oui ! Je suis ton ami !', type: 'askfriend' },

@@ -296,3 +296,7 @@ small.inline { display: inline; color: var(--chalk-dim); font-size: .85rem; }
 .kid .emo { font-size: 1.8rem; }
 .kid[aria-pressed="true"] { border-color: var(--rouge); background: rgba(230,57,70,.15); }
 .cast-input { width: min(100%, 26em); }
+.jacques { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.jacques .emo { font-size: clamp(3.4rem, 13vw, 4.6rem); }
+.jacques .prompt { font-size: clamp(1.8rem, 6.5vw, 2.5rem); }
+.board > .bigpic { align-self: center; }

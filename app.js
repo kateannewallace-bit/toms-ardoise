@@ -18,10 +18,11 @@ const sibName = () => (state.playmate || '').trim() || 'Léo';
 const bigName = () => (state.big || '').trim() || 'Lou';
 const farName = () => (state.far || '').trim() || 'Jade';
 const fill = (s, digits) => String(s).replace(/\{name\}/g, frName()).replace(/\{age\}/g, digits ? String(childAge()) : numFr(childAge()))
-  .replace(/\{sib\}/g, sibName()).replace(/\{big\}/g, bigName()).replace(/\{far\}/g, farName());
+  .replace(/\{([^{}\/]+)\/([^{}]+)\}/g, (_, m, f) => girl() ? f : m).replace(/\{sib\}/g, sibName()).replace(/\{big\}/g, bigName()).replace(/\{far\}/g, farName());
 // The playmate's picture is their own profile picture when they have one here.
 const sceneWho = sc => sc.who === '{sib}' ? (Object.values(family.kids).find(k => k !== state && (k.childName || '').trim().toLowerCase() === sibName().toLowerCase())?.me || '🙂') : sc.who;
 const me = () => state.me || '🧒';
+const girl = () => state.me === '👧';
 const greet = s => childName() ? `${s}, ${childName()} !` : `${s} !`;
 
 /* ---------- numbers in French ---------- */
@@ -53,8 +54,9 @@ const bare = s => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '
   .replace(/^(le |la |les |l'|un |une |des |du |the |a |an |some )/, '').replace(/[^a-z0-9' -]/g, '').replace(/\s+/g, ' ').trim();
 function parseWords(text) {
   return text.trim().split('\n').map(l => l.trim()).filter(Boolean).map(l => {
-    const [fr, en, pic, q] = l.split('|').map(s => s.trim());
-    return { fr, en, pic, q };
+    const [fr, en, pic, ...rest] = l.split('|').map(s => s.trim());
+    const fem = rest.find(x => x.startsWith('f='))?.slice(2), [q, imp] = rest.filter(x => !x.startsWith('f='));
+    return { fr, en, pic, q, imp, fem };
   });
 }
 const chunk = (a, n) => { const out = []; for (let i = 0; i < a.length; i += n) out.push(a.slice(i, i + n)); return out; };
@@ -73,7 +75,10 @@ function buildVocab() {
       t.levels = NUMBER_LEVELS;
       continue;
     }
-    const items = t.seasonal ? parseWords(season().words) : t.custom ? (state.custom || []).map(c => ({ ...c })) : parseWords(t.words);
+    let items = t.seasonal ? parseWords(season().words) : t.custom ? (state.custom || []).map(c => ({ ...c })) : parseWords(t.words);
+    // action words are taught as "il nage" (the infinitive stays as a note); feelings agree for a girl
+    if (t.ask === 'fait') items = items.map(w => ({ ...w, inf: w.fr, fr: `il ${w.q}` }));
+    if (girl()) items = items.map(w => w.fem ? { ...w, fr: w.fem } : w);
     t.sets = chunk(items, SET_SIZE);
     if (!t.sets.length) t.sets = [[]];
     t.levels = t.sets.map((s, i) => `Set ${i + 1}: ${s.slice(0, 3).map(w => bare(w.fr)).join(', ')}${s.length > 3 ? '…' : ''}`);
@@ -364,13 +369,21 @@ function distractors(k, L, target) {
   for (const w of shuffle(pool)) { if (out.length < 3 && !seen.has(w.fr) && !seen.has(w.pic)) { out.push(w); seen.add(w.fr); seen.add(w.pic); } }
   return out;
 }
+// body parts you move rather than touch
+const BODY_MOVES = { 'la main': 'lève la main', 'le bras': 'lève les bras', 'la jambe': 'lève la jambe', 'le pied': 'tape du pied', 'le doigt': 'montre ton doigt', 'la langue': 'tire la langue' };
 function genWord(k, L, kind, fr, avoid = new Set(), gate) {
   const target = (fr && findItem(k, fr)) || pickTarget(k, L, kind, avoid, gate);
-  const p = { wid: target.fr, fr: target.fr, en: target.en, pic: target.pic };
+  const p = { wid: target.fr, fr: target.fr, en: target.inf ? `${target.en} (${target.inf})` : target.en, pic: target.pic };
+  // "Jacques a dit": hear a command and do it, but only when Jacques says so. Only for words already met.
+  if (TOPIC[k].jacques && target.fr !== 'le cerveau' && isSeen(target.fr) && kind !== 'stretch' && kind !== 'check' && rng() < 0.35) {
+    const cmd = target.imp || BODY_MOVES[target.fr] || `touche ${{ 'le ': 'ton ', 'la ': 'ta ', "l'": 'ton ', 'les ': 'tes ' }[target.fr.match(/^(le |la |les |l')/)?.[0]] || ''}${target.fr.replace(/^(le |la |les |l')/, '')}`;
+    const said = rng() < 0.75;
+    return Object.assign(p, { mode: 'jacques', said, fr: `${cmd} !`, prompt: said ? `Jacques a dit : ${cmd} !` : `${cap(cmd)} !`, choices: [] });
+  }
   if (state.sayIt && kind !== 'stretch' && kind !== 'check' && isKnown(target.fr) && rng() < 0.4) {
     return Object.assign(p, { mode: 'say', prompt: sayAsk(k), choices: [] });
   }
-  const choices = [target, ...distractors(k, L, target)].map(w => ({ html: picHtml(w.pic), fr: w.fr, en: w.en, ok: w === target }));
+  const choices = [target, ...distractors(k, L, target)].map(w => ({ html: picHtml(w.pic), fr: w.fr, en: w.en, ok: w === target, sentence: TOPIC[k].ask === 'fait' }));
   return Object.assign(p, { mode: 'listen', prompt: askFor(k, target), choices });
 }
 
@@ -383,6 +396,7 @@ const PH_FOODS = [['une carotte', '🥕', 'a carrot'], ['une pomme', '🍎', 'an
 const PH_ANIMALS = [['le chat', '🐱', 'cat'], ['la souris', '🐭', 'mouse'], ['le lapin', '🐰', 'rabbit'], ['la grenouille', '🐸', 'frog'], ["l'oiseau", '🐦', 'bird'], ['le chien', '🐶', 'dog']];
 const PH_THINGS = [['la boîte', 'de la boîte', '📦', 'box'], ['le chapeau', 'du chapeau', '🎩', 'hat'], ['le panier', 'du panier', '🧺', 'basket']];
 const PH_PREPS = [['dans', 'in'], ['sur', 'on'], ['sous', 'under'], ['cote', 'next to']];
+const PH_FRAMES = [['Je veux', '!', 'I want to'], ['On va', '!', "We're going to"], ["J'aime", '!', 'I like to'], ['Tu veux', '?', 'Do you want to']];
 function twoByTwo(a, b, make) {
   // the right answer plus the three mix-ups: right first part / wrong second, and so on
   return [make(a[0], b[0], true), make(a[0], b[1]), make(a[1], b[0]), make(a[1], b[1])];
@@ -405,6 +419,12 @@ function genPhrase(L) {
     const line = (e, f) => `${cap(e[0])} mange ${f[0]}.`;
     const choices = twoByTwo([e1, e2], [f1, f2], (e, f, ok) => ({ html: `<span class="pair"><span class="emo">${e[1]}</span><span class="emo sm">${f[1]}</span></span>`, fr: line(e, f), en: `The ${e[2]} is eating ${f[2]}.`, ok: !!ok, sentence: true }));
     return { mode: 'listen', fr: line(e1, f1), en: `The ${e1[2]} is eating ${f1[2]}.`, prompt: line(e1, f1), lead: 'Montre-moi :', choices };
+  }
+  if (L >= 5) {
+    // the infinitive where children really hear it: after je veux, on va, j'aime, tu veux
+    const acts = shuffle(TOPIC.actions.sets.flat()).slice(0, 4), f = pick(PH_FRAMES), line = w => `${f[0]} ${w.inf} ${f[1]}`;
+    const choices = acts.map((w, i) => ({ html: picHtml(w.pic), fr: line(w), en: `${f[2]} ${w.en}${f[1]}`, ok: i === 0, sentence: true }));
+    return { mode: 'listen', fr: line(acts[0]), en: `${f[2]} ${acts[0].en}${f[1]}`, prompt: line(acts[0]), lead: 'Montre-moi :', choices };
   }
   const a = pick(PH_ANIMALS), o = pick(PH_THINGS), right = pick(PH_PREPS);
   const line = pr => `${cap(a[0])} est ${pr[0] === 'cote' ? 'à côté ' + o[1] : pr[0] + ' ' + o[0]}.`;
@@ -801,11 +821,15 @@ function renderPlay() {
   let fb = '';
   if (p.mode === 'intro') fb = '';
   else if (p.done && !p.revealed) fb = `<span class="big good">${esc(p.praise)}</span>${word}`;
+  else if (p.revealed && p.mode === 'jacques') fb = `<span class="big try">${p.said ? 'Jacques a dit !' : "Jacques n'a rien dit !"}</span>${word}`;
   else if (p.revealed) fb = `<span class="big try">${p.mode === 'say' ? 'Pas encore. Écoute bien :' : 'Voilà :'}</span>${word}`;
   else if (p.tries && p.lastWrong) fb = `<span class="big try">${p.lastWrong.sentence ? 'Non : ' : "Ça, c'est "}${esc(p.lastWrong.fr)}${p.lastWrong.sentence ? '' : '.'}</span><span class="how">${esc(p.lastWrong.en)} · Essaie encore !</span>`;
   const last = sess.i === sess.probs.length - 1;
   let body, controls;
-  if (p.mode === 'intro') {
+  if (p.mode === 'jacques') {
+    body = `<div class="jacques"><span class="emo">🗣️</span><div class="prompt">${esc(p.prompt)}</div></div>`;
+    controls = p.done ? `<div class="bigpic">${picHtml(p.pic)}</div>` : `<div class="row-btns center"><button class="start" data-act="jq" data-v="1">✓ Je l'ai fait !</button><button class="ghost" data-act="jq" data-v="0">✋ Je n'ai pas bougé</button></div><p class="note center">Do it only if Jacques says so!</p>`;
+  } else if (p.mode === 'intro') {
     body = p.convo ? `<div class="prompt"><span class="tag stretch">Écoute !</span></div>${convoBody(p)}`
       : `<div class="prompt"><span class="tag stretch">Nouveau mot !</span></div><button class="intro-btn" data-act="intro-again" aria-label="Hear it again">${picHtml(p.pic)}</button><div class="feedback">${word}</div>`;
     controls = `<p class="note center">${p.convo ? 'Listen to both sides. Tap a bubble to hear it again, and say it together.' : 'Tap the picture to hear it again, and say it together.'}</p>`;
@@ -1107,6 +1131,14 @@ app.addEventListener('click', e => {
   else if (act === 'age') { state.childAge = Math.max(2, Math.min(15, childAge() + +b.dataset.d)); save(); render(); }
   else if (act === 'said-yes') sayCheck(true);
   else if (act === 'said-no') sayCheck(false);
+  else if (act === 'jq') {
+    const p = sess.probs[sess.i];
+    if (p.done) return;
+    const ok = (b.dataset.v === '1') === p.said;
+    p.done = true; p.revealed = !ok; p.praise = pick(PRAISE);
+    say(ok ? p.praise : p.said ? `Jacques a dit : ${p.fr}` : "Jacques n'a rien dit !");
+    record(p, ok); render();
+  }
   else if (act === 'speak') say(b.dataset.t);
   else if (act === 'home') { screen = 'home'; confirmWipe = false; wiped = false; confirmTopic = null; importMsg = null; render(); }
   else if (act === 'parent') { screen = 'parent'; render(); }

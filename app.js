@@ -441,10 +441,10 @@ function genConvo(L, kind, fr, avoid = new Set(), gate) {
   const p = { convo: true, scene: item.scene, step: item.step, wid: item.fr, who: sceneWho(sc), pitch: sc.pitch,
     fr: fill(st.you || st.ask), en: fill(st.en), pic: fill(st.pic, true), them: st.them && fill(st.them), ask: !!st.ask, hint: st.hint, answer: st.answer && fill(st.answer), prompt: st.them ? fill(st.them) : 'À toi !', choices: [] };
   if (st.ask || (state.sayIt && kind !== 'stretch' && kind !== 'check' && isKnown(item.fr) && rng() < 0.4)) return Object.assign(p, { mode: 'say' });
-  const pool = SCENES.slice(0, Math.max(L + 2, 4)).flatMap(s => s.steps).filter(x => x.you && x.type !== st.type && x.pic !== st.pic && !(YES_NO.test(st.you) && YES_NO.test(x.you)));
-  const seenPics = new Set([st.pic]), wrong = [];
-  for (const x of shuffle(pool)) if (wrong.length < 3 && !seenPics.has(x.pic)) { wrong.push(x); seenPics.add(x.pic); }
-  p.choices = [st, ...wrong].map(x => ({ html: `<span class="emo reply">${esc(fill(x.pic, true))}</span>`, fr: fill(x.you), en: fill(x.en), ok: x === st, sentence: true }));
+  const pool = SCENES.slice(0, Math.max(L + 2, 4)).flatMap(s => s.steps).filter(x => x.you && x.type !== st.type && !(YES_NO.test(st.you) && YES_NO.test(x.you)));
+  const seen = new Set([fill(st.you)]), wrong = [];
+  for (const x of shuffle(pool)) if (wrong.length < 3 && !seen.has(fill(x.you))) { wrong.push(x); seen.add(fill(x.you)); }
+  p.choices = [st, ...wrong].map(x => ({ html: esc(fill(x.you)), fr: fill(x.you), en: fill(x.en), ok: x === st, sentence: true }));
   return Object.assign(p, { mode: 'listen' });
 }
 
@@ -634,7 +634,7 @@ function record(p, first) {
     const before = isKnown(p.wid), w = state.words[p.wid] = state.words[p.wid] || { r: 0, m: 0 };
     if (first) w.r = Math.min(20, (w.r || 0) + 1); else { w.m = Math.min(20, (w.m || 0) + 1); w.k = 0; }
     w.t = Date.now();
-    if (!before && isKnown(p.wid) && !sess.learned.some(x => x.fr === p.fr)) sess.learned.push({ fr: p.fr, pic: p.pic, en: p.en });
+    if (!before && isKnown(p.wid) && !sess.learned.some(x => x.fr === p.fr)) sess.learned.push({ fr: p.fr, pic: p.convo ? '' : p.pic, en: p.en });
   }
   if (p.kind === 'current') state.rec[p.topic] = [...(state.rec[p.topic] || []), first].slice(-10);
   if (p.kind === 'stretch') state.stretch[p.topic] = [...(state.stretch[p.topic] || []), first].slice(-5);
@@ -807,10 +807,9 @@ function bubble(side, avatar, text, pitch, past) {
 function convoBody(p) {
   const them = (t, past) => bubble('them', p.who, t, p.pitch, past), you = (t, past) => bubble('you', me(), t, KID_PITCH, past);
   const hist = (p.history || []).map(b => b.who === 'them' ? them(b.text, true) : you(b.text, true)).join('');
-  const intent = `<span class="intent">${picHtml(p.pic)}</span>`;
   let cur;
-  if (p.mode === 'intro') cur = p.ask ? `<div class="intro-pic">${intent}</div>${you(p.fr)}${them(p.answer)}` : `${them(p.them)}<div class="intro-pic">${intent}</div>${you(p.fr)}`;
-  else if (p.ask) cur = `<div class="bubble you hint"><span class="av">${me()}</span><div class="text"><strong>À toi !</strong> ${intent}<small>${esc(fill(p.hint))}</small></div></div>${p.done ? you(p.fr) + them(p.answer) : ''}`;
+  if (p.mode === 'intro') cur = p.ask ? `${you(p.fr)}${them(p.answer)}` : `${them(p.them)}${you(p.fr)}`;
+  else if (p.ask) cur = `<div class="bubble you hint"><span class="av">${me()}</span><div class="text"><strong>À toi !</strong><small>${esc(fill(p.hint))}</small></div></div>${p.done ? you(p.fr) + them(p.answer) : ''}`;
   else cur = them(p.them) + (p.done ? you(p.fr) : '');
   return `<div class="convo">${hist}${cur}</div>`;
 }
@@ -843,7 +842,12 @@ function renderPlay() {
   } else {
     const correctIdx = p.choices.findIndex(c => c.ok);
     body = p.convo ? convoBody(p) : `<div class="prompt">${p.lead ? `<span class="dim">${esc(p.lead)}</span> ` : ''}${esc(p.prompt)}</div>`;
-    controls = `<div class="choices pics ${p.choices.length > 4 ? 'many-choices' : ''}">${p.choices.map((c, j) => {
+    // conversations: written replies, each with a speaker button so a non-reader can hear them first
+    if (p.convo) controls = `<div class="replies">${p.choices.map((c, j) => {
+      const cls = p.wrong.includes(j) ? 'no' : (p.done && j === correctIdx ? 'ok' : '');
+      return `<div class="reply-row"><button class="say" data-act="line" data-t="${esc(c.fr)}" data-p="${KID_PITCH}" aria-label="Hear this reply">${speakerIcon}</button><button class="choice reply ${cls}" data-act="pick" data-i="${j}" ${p.done || p.wrong.includes(j) ? 'disabled' : ''}><span class="key">${j + 1}</span>${c.html}</button></div>`;
+    }).join('')}</div>`;
+    else controls = `<div class="choices pics ${p.choices.length > 4 ? 'many-choices' : ''}">${p.choices.map((c, j) => {
       const cls = p.wrong.includes(j) ? 'no' : (p.done && j === correctIdx ? 'ok' : '');
       return `<button class="choice pic ${cls}" data-act="pick" data-i="${j}" ${p.done || p.wrong.includes(j) ? 'disabled' : ''} aria-label="Picture ${j + 1}"><span class="key">${j + 1}</span>${c.html}</button>`;
     }).join('')}</div>`;
@@ -877,7 +881,7 @@ function roundNews() {
   if (unlocked.length) lines.push(...unlocked.map(([k]) => `<li class="big-news">Nouveau ! <strong>${esc(topicName(k))}</strong> (${esc(TOPIC[k].en)}) is turned on.</li>`));
   if (mastered.length) lines.push(...mastered.map(([k]) => `<li>${esc(topicName(k))}: every set learned. It will still come back now and then.</li>`));
   if (again.length) lines.push(`<li>Words from earlier days: ${againRight} of ${again.length} right${sess.cleared ? `, and ${sess.cleared} ${sess.cleared === 1 ? 'is' : 'are'} learned for good` : ''}.</li>`);
-  const learned = sess.learned.length ? `<section><h2>Nouveaux mots</h2><div class="learned">${sess.learned.map(w => `<button class="learned-word" data-act="speak" data-t="${esc(w.fr)}">${picHtml(w.pic)}<span>${esc(w.fr)}</span></button>`).join('')}</div></section>` : '';
+  const learned = sess.learned.length ? `<section><h2>Nouveaux mots</h2><div class="learned">${sess.learned.map(w => `<button class="learned-word" data-act="speak" data-t="${esc(w.fr)}">${w.pic ? picHtml(w.pic) : ''}<span>${esc(w.fr)}</span></button>`).join('')}</div></section>` : '';
   return learned + (lines.length ? `<section><h2>Cette fois</h2><ul class="ups">${lines.join('')}</ul></section>` : '');
 }
 

@@ -13,7 +13,7 @@ French for young kids who aren't reading yet, built on the same engine as [Tom's
 
 ## Run it
 
-It's a static site with no build step. Run it locally:
+It's live at <https://kateannewallace-bit.github.io/toms-ardoise/>. It's a static site with no build step; to run it locally:
 
 ```bash
 python3 -m http.server 8778

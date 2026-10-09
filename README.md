@@ -1,7 +1,9 @@
 # Tom's Ardoise
 
-French words for young kids who aren't reading yet, drawn on the same Waldorf-style chalkboard as [Tom's Chalkboard](https://github.com/kateannewallace-bit/toms-chalkboard). Built for Tom; the child's name is set on the grown-ups page.
+French for young kids who aren't reading yet, built on the same engine as [Tom's Chalkboard](https://github.com/kateannewallace-bit/toms-chalkboard), dressed in bleu marine, marinière stripes and French school cursive. Built for Tom; the child's name is set on the grown-ups page.
 
+- **Teach, then ask:** anything new is shown and said first ("Nouveau mot !"), then asked a couple of questions later. A round brings in about four new things, each asked no more than twice.
+- **On discute !** Short everyday conversations (Renart the fox, Mamie, dinner, the boulangerie, the park, school, Papi on the phone, a dragon, bedtime). The character asks, the child taps the picture of the right reply and then says it, and sometimes asks the question. Scenes can be played start to finish, modelled first.
 - **Listen and tap:** every question is spoken in French ("Où est le chat ?") and answered by tapping one of four pictures. A wrong tap names that picture ("Ça, c'est le chien"), so every tap teaches a word.
 - **Dis-le !** Words already known come back as speaking practice: see the picture, say it out loud, tap to hear it, then mark whether it matched.
 - **Topics:** greetings, colors, numbers to 100, shapes, animals, family, the body, food, clothes, home, toys and school, getting around, nature and weather, knights and tales, feelings, action words, little sentences ("une étoile verte", "trois chats", "le lapin est dans le chapeau"), a word set for each month's festival, and your own words.
@@ -25,4 +27,4 @@ Uses the same Supabase project and `supabase/schema.sql` as Tom's Chalkboard. Sy
 
 ## Updating
 
-After changing files, bump `VERSION` in `sw.js` so installed copies pick up the change. Words live in `words.js`: one line per word, `French | English | picture`.
+After changing files, bump `VERSION` in `sw.js` so installed copies pick up the change. Words live in `words.js`: one line per word, `French | English | picture`. Conversation scenes are in `SCENES` at the bottom of the same file.

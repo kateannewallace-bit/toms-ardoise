@@ -5,6 +5,8 @@
 
 // How each topic asks for a word: 'ou' → "Où est le chat ?", 'qui' → "Qui dit « merci » ?", 'fait' → "Qui nage ?"
 const TOPICS = [
+  { id: 'conversations', fr: 'On discute !', en: 'Conversations', convo: true },
+
   { id: 'bonjour', fr: 'Bonjour !', en: 'Hello and manners', ask: 'qui', sayAsk: "Qu'est-ce qu'on dit ?", words: `
 bonjour|hello|👋😀
 au revoir|goodbye|👋🚪
@@ -19,18 +21,19 @@ bon appétit|enjoy your meal|🍽️😋
 joyeux anniversaire|happy birthday|🎂🎉
 à demain|see you tomorrow|👋🌅` },
 
-  { id: 'couleurs', fr: 'Les couleurs', en: 'Colors', ask: 'ou', words: `
-le rouge|red|c:#e0473e
-le bleu|blue|c:#3f7fd9
-le jaune|yellow|c:#f2d23c
-le vert|green|c:#4caf50
-l'orange|orange|c:#f08a24
-le noir|black|c:#111111
-le blanc|white|c:#fafafa
-le rose|pink|c:#f28cb4
-le violet|purple|c:#8e5ccf
-le marron|brown|c:#8b5a2b
-le gris|gray|c:#9a9a9a` },
+  // Colors are taught bare ("rouge"), the way children answer "C'est quelle couleur ?". The question adds the article: "Où est le rouge ?"
+  { id: 'couleurs', fr: 'Les couleurs', en: 'Colors', ask: 'ou', article: true, words: `
+rouge|red|c:#e0473e
+bleu|blue|c:#3f7fd9
+jaune|yellow|c:#f2d23c
+vert|green|c:#4caf50
+orange|orange|c:#f08a24
+noir|black|c:#111111
+blanc|white|c:#fafafa
+rose|pink|c:#f28cb4
+violet|purple|c:#8e5ccf
+marron|brown|c:#8b5a2b
+gris|gray|c:#9a9a9a` },
 
   { id: 'nombres', fr: 'Les nombres', en: 'Numbers', ask: 'ou', numbers: true },
 
@@ -399,6 +402,7 @@ le renne|reindeer|🦌` },
 
 // Something to do away from the screen, matched to what was practiced. {name} is the child's name.
 const HANDS = {
+  conversations: 'Play a scene for real with toys or puppets: you are the boulangère, Mamie on the phone or the dragon. Then swap, so {name} asks the questions.',
   bonjour: 'Make French the family greeting today: "Bonjour !" at breakfast, "Merci !" at the table and "Bonne nuit !" at bedtime.',
   couleurs: 'Color hunt: call "Trouve quelque chose de rouge !" and race to touch something red. Then swap who calls.',
   nombres: 'Count the stairs in French on the way up, and back down. Play "Un, deux, trois, soleil !" (French Red Light, Green Light).',
@@ -424,8 +428,7 @@ const CHEERS = [
   [['Magnifique', 'Renart the fox tips his hat to you!'],
    ['Formidable', 'Roland would blow his great horn for a round like that!'],
    ['Bravo', 'Even the Tarasque stopped stomping to listen!'],
-   ['Chapeau', 'Fit for the court of Charlemagne!'],
-   ['Parfait', 'Puss in Boots bows low with his feathered hat!']],
+   ['Chapeau', 'Fit for the court of Charlemagne!']],
   [['Très bien', 'Saint Michel would lend you his golden sword!'],
    ['Super', 'Mélusine flicks her dragon tail with delight!'],
    ['Bien joué', 'A fine round for a young chevalier.']],
@@ -433,4 +436,72 @@ const CHEERS = [
    ['Bon travail', 'Every word you hear today will feel easier tomorrow.']],
   [['Courage', 'Even knights practice with their swords every day.'],
    ['On continue', 'New words are tricky at first. You heard lots of them today!']],
+];
+
+/* Conversations: short scenes from everyday life. The character speaks; the child answers.
+   them: what the character says. you: the child's reply. pic: a picture of the reply's meaning.
+   type: what kind of reply it is. Wrong choices are always replies of another type, so only one picture answers the question.
+   ask: a turn where the child asks the question (hint is for the grown-up); answer: what the character says back.
+   {name} and {age} become the child's name and age. pitch: how high the character's voice is. */
+const SCENES = [
+  { title: 'Bonjour, Renart !', who: '🦊', pitch: 1.3, steps: [
+    { them: 'Bonjour !', you: 'Bonjour, Renart !', pic: '👋😀', en: 'Hello, Renart!', type: 'greet' },
+    { them: "Comment tu t'appelles ?", you: "Je m'appelle {name}.", pic: '🙋📛', en: 'My name is {name}.', type: 'name' },
+    { ask: "Et toi, comment tu t'appelles ?", hint: 'Ask the fox his name.', pic: '❓📛', en: "And you, what's your name?", answer: "Moi, je m'appelle Renart !", type: 'askname' },
+    { them: 'Au revoir, {name} !', you: 'Au revoir, Renart !', pic: '👋🚪', en: 'Goodbye, Renart!', type: 'bye' },
+  ] },
+  { title: 'Ça va, Mamie ?', who: '👵', pitch: 1.05, steps: [
+    { them: 'Bonjour ! Ça va ?', you: 'Ça va bien, merci !', pic: '😊👍', en: "I'm fine, thank you!", type: 'fine' },
+    { ask: 'Et toi, ça va ?', hint: 'Ask Mamie how she is.', pic: '❓😊', en: 'And you, how are you?', answer: 'Très bien, merci !', type: 'askhow' },
+    { them: 'Tu as faim ?', you: "Oui, j'ai faim !", pic: '🤤🍽️', en: "Yes, I'm hungry!", type: 'hungry' },
+    { them: 'Tu veux une crêpe ?', you: "Oui, s'il te plaît !", pic: '👍🙏', en: 'Yes, please!', type: 'yesplease' },
+    { them: 'Voilà !', you: 'Merci, Mamie !', pic: '🎁😊', en: 'Thank you, Mamie!', type: 'thanks' },
+  ] },
+  { title: 'Le chevalier', who: '🤺', pitch: 0.8, steps: [
+    { them: 'Bonjour ! Quel âge as-tu ?', you: "J'ai {age} ans.", pic: '🎂{age}', en: "I'm {age}.", type: 'age' },
+    { them: 'Tu aimes les dragons ?', you: "Oui, j'adore les dragons !", pic: '😍🐉', en: 'Yes, I love dragons!', type: 'like' },
+    { ask: 'Et toi, quel âge as-tu ?', hint: 'Ask the knight how old he is.', pic: '❓🎂', en: 'And you, how old are you?', answer: "Moi ? J'ai cent ans !", type: 'askage' },
+    { them: 'Tu veux une épée ?', you: 'Oh oui ! Merci beaucoup !', pic: '🗡️😃', en: 'Oh yes! Thank you very much!', type: 'gift' },
+  ] },
+  { title: 'À table !', who: '👨', pitch: 0.8, steps: [
+    { them: 'À table !', you: "J'arrive !", pic: '🏃🍽️', en: "I'm coming!", type: 'coming' },
+    { them: 'Bon appétit !', you: 'Merci ! Bon appétit, Papa !', pic: '🍽️😋', en: 'Thanks! Enjoy your meal, Papa!', type: 'bonap' },
+    { them: "Tu veux de l'eau ?", you: "Oui, s'il te plaît. J'ai soif.", pic: '🥤🙏', en: "Yes, please. I'm thirsty.", type: 'thirsty' },
+    { them: 'Encore des pâtes ?', you: "Non merci, j'ai fini !", pic: '🙅✅', en: "No thanks, I've finished!", type: 'nothanks' },
+  ] },
+  { title: 'À la boulangerie', who: '👩‍🍳', pitch: 1.1, steps: [
+    { them: "Bonjour ! Qu'est-ce que tu veux ?", you: "Un croissant, s'il vous plaît.", pic: '🥐🙏', en: 'A croissant, please.', type: 'order' },
+    { them: 'Et avec ça ?', you: "C'est tout, merci.", pic: '✋✅', en: "That's all, thank you.", type: 'enough' },
+    { them: 'Ça fait un euro.', you: 'Voilà, madame.', pic: '🪙👉', en: 'Here you are, madam.', type: 'pay' },
+    { them: 'Merci ! Au revoir !', you: 'Au revoir, madame !', pic: '👋🏪', en: 'Goodbye, madam!', type: 'bye' },
+  ] },
+  { title: 'Au parc', who: '👧', pitch: 1.45, steps: [
+    { them: 'Salut ! Tu veux jouer ?', you: 'Oui ! On joue au ballon ?', pic: '⚽😀', en: 'Yes! Shall we play ball?', type: 'play' },
+    { ask: "Comment tu t'appelles ?", hint: 'Ask her name.', pic: '❓📛', en: "What's your name?", answer: "Je m'appelle Léa !", type: 'askname' },
+    { them: 'On fait la course ?', you: "D'accord ! Un, deux, trois, partez !", pic: '🏁🏃', en: 'OK! One, two, three, go!', type: 'race' },
+    { them: 'Je dois partir. Salut !', you: 'Salut ! À demain !', pic: '👋🌅', en: 'Bye! See you tomorrow!', type: 'bye' },
+  ] },
+  { title: "À l'école", who: '👩‍🏫', pitch: 1.05, steps: [
+    { them: "Bonjour ! Tu as besoin d'aide ?", you: "Oui, s'il vous plaît. Je ne comprends pas.", pic: '🤔❓', en: "Yes, please. I don't understand.", type: 'help' },
+    { them: 'Tu as un crayon ?', you: "Non, je n'ai pas de crayon.", pic: '✏️🚫', en: "No, I don't have a pencil.", type: 'havenot' },
+    { ask: 'Où sont les toilettes ?', hint: 'Ask where the toilet is.', pic: '❓🚽', en: 'Where is the toilet?', answer: "C'est par là !", type: 'askwhere' },
+    { them: 'Ça va mieux ?', you: 'Oui, merci !', pic: '😊👍', en: 'Yes, thank you!', type: 'fine' },
+  ] },
+  { title: 'Au téléphone', who: '👴', pitch: 0.7, steps: [
+    { them: "Allô ? C'est qui ?", you: "C'est {name} ! Bonjour, Papi !", pic: '📞🙋', en: "It's {name}! Hello, Papi!", type: 'phone' },
+    { them: "Qu'est-ce que tu fais ?", you: 'Je dessine un dragon !', pic: '🎨🐉', en: "I'm drawing a dragon!", type: 'doing' },
+    { them: "Je t'aime ! Gros bisous !", you: 'Moi aussi ! Bisous, Papi !', pic: '❤️😘', en: 'Me too! Kisses, Papi!', type: 'love' },
+    { them: 'Au revoir !', you: 'Au revoir, Papi ! À bientôt !', pic: '👋📞', en: 'Goodbye, Papi! See you soon!', type: 'bye' },
+  ] },
+  { title: 'Le dragon', who: '🐉', pitch: 0.5, steps: [
+    { them: 'Grrr ! Qui es-tu ?', you: 'Je suis {name}, le chevalier !', pic: '🤺📛', en: "I'm {name} the knight!", type: 'name' },
+    { them: 'Tu as peur ?', you: "Non, je n'ai pas peur !", pic: '💪😤', en: "No, I'm not scared!", type: 'brave' },
+    { them: 'Tu veux un gâteau ?', you: 'Oui, merci, dragon !', pic: '🎂🙏', en: 'Yes, thank you, dragon!', type: 'yesplease' },
+    { ask: 'Tu veux être mon ami ?', hint: 'Ask the dragon to be your friend.', pic: '❓🤝', en: 'Do you want to be my friend?', answer: 'Oui ! Je suis ton ami !', type: 'askfriend' },
+  ] },
+  { title: 'Bonne nuit', who: '👩', pitch: 1.1, steps: [
+    { them: "C'est l'heure de dormir !", you: "Encore une histoire, s'il te plaît !", pic: '📖🙏', en: 'One more story, please!', type: 'story' },
+    { them: 'Tu as sommeil ?', you: 'Oui, un peu.', pic: '🥱🤏', en: 'Yes, a little.', type: 'sleepy' },
+    { them: 'Bonne nuit ! Fais de beaux rêves !', you: "Bonne nuit, Maman ! Je t'aime !", pic: '🌙❤️', en: 'Good night, Maman! I love you!', type: 'goodnight' },
+  ] },
 ];

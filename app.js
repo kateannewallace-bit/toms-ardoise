@@ -10,6 +10,10 @@ const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 // The child's name, set on the grown-ups page.
 const childName = () => (state.childName || '').trim();
 const N = () => childName() || 'your child';
+// In French lines, a child with no name set is "Pip".
+const frName = () => childName() || 'Pip';
+const childAge = () => Math.max(2, Math.min(15, +state.childAge || 6));
+const fill = (s, digits) => String(s).replace(/\{name\}/g, frName()).replace(/\{age\}/g, digits ? String(childAge()) : numFr(childAge()));
 const greet = s => childName() ? `${s}, ${childName()} !` : `${s} !`;
 
 /* ---------- numbers in French ---------- */
@@ -32,7 +36,7 @@ const SET_SIZE = 6;
 const TOPIC = Object.fromEntries(TOPICS.map(t => [t.id, t]));
 const ORDER = TOPICS.map(t => t.id);
 const GROUPS = [
-  { title: 'Premiers mots', note: 'First words', keys: ['bonjour', 'couleurs', 'nombres', 'animaux', 'famille', 'corps', 'formes'] },
+  { title: 'Premiers mots', note: 'First words', keys: ['conversations', 'bonjour', 'couleurs', 'nombres', 'animaux', 'famille', 'corps', 'formes'] },
   { title: 'Encore des mots', note: 'More words', keys: ['nourriture', 'vetements', 'maison', 'jouets', 'transports', 'nature', 'contes', 'emotions', 'actions'] },
   { title: 'Phrases et saisons', note: 'Sentences and seasons', keys: ['phrases', 'saison', 'mesmots'] },
 ];
@@ -50,6 +54,12 @@ const season = () => SEASONS[new Date().getMonth()];
 function buildVocab() {
   for (const t of TOPICS) {
     if (t.phrases) { t.sets = []; continue; }
+    if (t.convo) {
+      // each scene is one level; its items are the child's lines, keyed by their unfilled text
+      t.sets = SCENES.map((sc, i) => sc.steps.map((st, j) => ({ fr: st.you || st.ask, en: st.en, pic: st.pic, scene: i, step: j })));
+      t.levels = SCENES.map(sc => `${sc.who} ${sc.title}`);
+      continue;
+    }
     if (t.numbers) {
       t.sets = NUMBER_SETS.map(s => s.map(n => ({ fr: numFr(n), en: String(n), pic: 'n:' + n, n })));
       t.levels = NUMBER_LEVELS;
@@ -64,7 +74,7 @@ function buildVocab() {
 const levelsOf = k => TOPIC[k].levels || [''];
 const maxLevel = k => levelsOf(k).length;
 const allItems = k => (TOPIC[k].sets || []).flat();
-const wordTopics = () => TOPICS.filter(t => !t.phrases);
+const wordTopics = () => TOPICS.filter(t => !t.phrases && !t.convo);
 function findItem(k, fr) { return allItems(k).find(w => w.fr === fr); }
 const topicReady = k => TOPIC[k].phrases || allItems(k).length > 0;
 
@@ -72,7 +82,8 @@ const topicReady = k => TOPIC[k].phrases || allItems(k).length > 0;
 function defaultState() {
   return {
     levels: Object.fromEntries(ORDER.map(k => [k, 1])),
-    on: { bonjour: true, couleurs: true, nombres: true, animaux: true, saison: true },
+    on: { conversations: true, couleurs: true, nombres: true, animaux: true },
+    childAge: 6,
     rec: {}, stretch: {}, mastered: {}, words: {}, cards: [], cleared: 0, custom: [],
     sessions: [], log: [], done: {}, total: 0, perSession: 10, sayIt: true, speed: 'normal', updatedAt: 0,
   };
@@ -185,17 +196,25 @@ function chosenVoice() {
   }
   return voices.slice().sort((a, b) => score(a) - score(b))[0] || null;
 }
-function say(t, slow) {
-  if (!canSpeak || !t) return;
+// parts: [[text, pitch], …] spoken one after another. Characters in conversations get their own pitch; the child's lines are a little higher.
+const KID_PITCH = 1.2;
+function sayAll(parts, slow) {
+  if (!canSpeak) return;
   try {
     speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(t), v = chosenVoice();
-    u.lang = v ? v.lang : 'fr-FR';
-    if (v) u.voice = v;
-    u.rate = slow ? 0.55 : state.speed === 'slow' ? 0.72 : 0.88;
-    speechSynthesis.speak(u);
+    const v = chosenVoice();
+    for (const [t, pitch] of parts) {
+      if (!t) continue;
+      const u = new SpeechSynthesisUtterance(t);
+      u.lang = v ? v.lang : 'fr-FR';
+      if (v) u.voice = v;
+      u.rate = slow ? 0.55 : state.speed === 'slow' ? 0.72 : 0.88;
+      u.pitch = pitch || 1;
+      speechSynthesis.speak(u);
+    }
   } catch (e) {}
 }
+const say = (t, slow, pitch) => sayAll([[t, pitch]], slow);
 
 /* ---------- pictures ---------- */
 function starPath(cx, cy, R, r) {
@@ -250,6 +269,7 @@ function askFor(k, w) {
   if (t.ask === 'qui') return `Qui dit « ${w.fr} » ?`;
   if (t.ask === 'fait') return `Qui ${w.q} ?`;
   if (t.numbers) return `Où est le ${w.fr} ?`;
+  if (t.article) return `Où est ${/^[aeiouéh]/i.test(w.fr) ? "l'" : 'le '}${w.fr} ?`;
   return `${/^les /.test(w.fr) ? 'Où sont' : 'Où est'} ${w.fr} ?`;
 }
 const sayAsk = k => TOPIC[k].sayAsk || SAY_ASK[k] || "Qu'est-ce que c'est ?";
@@ -259,12 +279,14 @@ function weighted(pool) {
   for (const w of pool) { x -= wt(w); if (x <= 0) return w; }
   return pool[pool.length - 1];
 }
-function pickTarget(k, L, kind, avoid) {
+// gate: once a round has its new words, only words already met (or introduced this round) can be picked
+function pickTarget(k, L, kind, avoid, gate) {
   const sets = TOPIC[k].sets;
   let pool = kind === 'stretch' ? (sets[L] || []).filter(w => !isKnown(w.fr))
     : kind === 'easier' ? sets.slice(0, L - 1).flat()
     : eligible(k, L);
   if (!pool.length) pool = eligible(k, L);
+  if (gate) { const met = pool.filter(w => isSeen(w.fr) || gate.has(w.fr)); if (met.length) pool = met; }
   const fresh = pool.filter(w => !avoid.has(w.fr));
   return weighted(fresh.length ? fresh : pool);
 }
@@ -285,8 +307,8 @@ function distractors(k, L, target) {
   for (const w of shuffle(pool)) { if (out.length < 3 && !seen.has(w.fr) && !seen.has(w.pic)) { out.push(w); seen.add(w.fr); seen.add(w.pic); } }
   return out;
 }
-function genWord(k, L, kind, fr, avoid = new Set()) {
-  const target = (fr && findItem(k, fr)) || pickTarget(k, L, kind, avoid);
+function genWord(k, L, kind, fr, avoid = new Set(), gate) {
+  const target = (fr && findItem(k, fr)) || pickTarget(k, L, kind, avoid, gate);
   const p = { wid: target.fr, fr: target.fr, en: target.en, pic: target.pic };
   if (state.sayIt && kind !== 'stretch' && kind !== 'check' && isKnown(target.fr) && rng() < 0.4) {
     return Object.assign(p, { mode: 'say', prompt: sayAsk(k), choices: [] });
@@ -333,12 +355,28 @@ function genPhrase(L) {
   return { mode: 'listen', fr: line(right), en: `The ${a[2]} is ${right[1]} the ${o[3]}.`, prompt: line(right), lead: 'Montre-moi :', choices };
 }
 
+/* Conversations: the character speaks, the child picks the picture of the right reply (or says it, once known).
+   Wrong pictures are replies to other kinds of questions, never another yes/no answer to a yes/no question. */
+const YES_NO = /^(oui|non|d'accord|oh oui)/i;
+function genConvo(L, kind, fr, avoid = new Set(), gate) {
+  const item = (fr && findItem('conversations', fr)) || pickTarget('conversations', L, kind, avoid, gate);
+  const sc = SCENES[item.scene], st = sc.steps[item.step];
+  const p = { convo: true, scene: item.scene, step: item.step, wid: item.fr, who: sc.who, pitch: sc.pitch,
+    fr: fill(st.you || st.ask), en: fill(st.en), pic: fill(st.pic, true), them: st.them && fill(st.them), ask: !!st.ask, hint: st.hint, answer: st.answer && fill(st.answer), prompt: st.them ? fill(st.them) : 'À toi !', choices: [] };
+  if (st.ask || (state.sayIt && kind !== 'stretch' && kind !== 'check' && isKnown(item.fr) && rng() < 0.4)) return Object.assign(p, { mode: 'say' });
+  const pool = SCENES.slice(0, Math.max(L + 2, 4)).flatMap(s => s.steps).filter(x => x.you && x.type !== st.type && x.pic !== st.pic && !(YES_NO.test(st.you) && YES_NO.test(x.you)));
+  const seenPics = new Set([st.pic]), wrong = [];
+  for (const x of shuffle(pool)) if (wrong.length < 3 && !seenPics.has(x.pic)) { wrong.push(x); seenPics.add(x.pic); }
+  p.choices = [st, ...wrong].map(x => ({ html: `<span class="emo reply">${esc(fill(x.pic, true))}</span>`, fr: fill(x.you), en: fill(x.en), ok: x === st, sentence: true }));
+  return Object.assign(p, { mode: 'listen' });
+}
+
 // kind: 'current' (his level), 'easier' (an earlier set), 'stretch' (a word from the next set), 'again' (spaced review of a miss)
-function makeProblem(k, level = state.levels[k], seed = newSeed(), kind = 'current', fr, avoid) {
+function makeProblem(k, level = state.levels[k], seed = newSeed(), kind = 'current', fr, avoid, gate) {
   level = Math.max(1, Math.min(level, maxLevel(k)));
   rng = seeded(seed);
   try {
-    const p = TOPIC[k].phrases ? genPhrase(level) : genWord(k, level, kind, fr, avoid);
+    const p = TOPIC[k].phrases ? genPhrase(level) : TOPIC[k].convo ? genConvo(level, kind, fr, avoid, gate) : genWord(k, level, kind, fr, avoid, gate);
     Object.assign(p, { topic: k, level, seed, kind, tries: 0, wrong: [], done: false, revealed: false });
     p.choices = shuffle(p.choices);
     return p;
@@ -380,17 +418,69 @@ function buildSession() {
     else if (roll > 0.89 && L < max && readyToStretch(k)) plan.push({ k, level: L + ph, kind: 'stretch' });
     else plan.push({ k, level: L, kind: 'current' });
   }
-  const used = new Set(), keys = new Set(), probs = [];
+  // Anything met for the first time is taught before it is asked: an intro card now, the question a little later.
+  // About MAX_NEW new things per round (a few more only if the round can't be filled otherwise), and nothing asked more than twice.
+  const used = new Set(), counts = new Map(), introduced = new Map(), groups = [];
+  const isNew = p => p.wid && !isSeen(p.wid) && !introduced.has(p.wid);
+  const fits = (p, strict) => (counts.get(p.fr) || 0) < 2 && !(isNew(p) && introduced.size >= (strict ? MAX_NEW : MAX_NEW + 2));
   for (const it of shuffle(plan)) {
-    let p = makeProblem(it.k, it.level, it.seed ?? newSeed(), it.kind, it.fr, used);
-    for (let tries = 0; keys.has(p.fr) && tries < 8; tries++) p = makeProblem(it.k, it.level, newSeed(), it.kind, it.fr, used);
-    p.card = it.card;
+    let gate = introduced.size >= MAX_NEW ? new Set(introduced.keys()) : null;
+    let p = makeProblem(it.k, it.level, it.seed ?? newSeed(), it.kind, it.fr, used, gate);
+    for (let tries = 0; !fits(p, tries < 6) && tries < 10; tries++) {
+      if (tries >= 6) gate = null;
+      // a topic with nothing met yet can't give a familiar word, so borrow a topic that has one
+      const k = gate && tries >= 2 ? [...introduced.values()][tries % introduced.size] : it.k;
+      p = makeProblem(k, k === it.k ? it.level : Math.min(state.levels[k], maxLevel(k)), newSeed(), k === it.k ? it.kind : 'current', k === it.k ? it.fr : undefined, used, gate);
+    }
+    if (p.wid === it.fr) p.card = it.card;
     if (p.wid) used.add(p.wid);
-    keys.add(p.fr); probs.push(p);
+    counts.set(p.fr, (counts.get(p.fr) || 0) + 1);
+    if (isNew(p)) introduced.set(p.wid, p.topic);
+    groups.push(p);
   }
-  return { probs, i: 0, results: [], cleared: 0, learned: [] };
+  groups.forEach(q => { if (introduced.has(q.wid)) q.introKey = q.wid; });
+  return { probs: schedule(groups), i: 0, results: [], cleared: 0, learned: [] };
+}
+const MAX_NEW = 4;
+const makeIntro = p => Object.assign({}, p, { mode: 'intro', kind: 'intro', choices: [], done: true, card: undefined });
+// Order a round: introduce new things early, ask each one only two or more slots after its intro, and never ask the same thing twice in a row.
+function schedule(probs) {
+  const out = [], pending = shuffle(probs), introAt = new Map();
+  const last = () => out[out.length - 1];
+  const ready = q => !q.introKey || (introAt.has(q.introKey) && out.length - introAt.get(q.introKey) >= 2);
+  const nextTo = q => last() && last().fr === q.fr && last().mode !== 'intro';
+  while (pending.length) {
+    const choices = pending.filter(q => ready(q) && !nextTo(q));
+    const fresh = pending.find(q => q.introKey && !introAt.has(q.introKey));
+    if (fresh && choices.length < 2) { out.push(makeIntro(fresh)); introAt.set(fresh.introKey, out.length - 1); continue; }
+    const q = choices[0] || pending.find(ready) || pending[0];
+    out.push(pending.splice(pending.indexOf(q), 1)[0]);
+  }
+  return out;
 }
 function startSession() { sess = buildSession(); screen = 'play'; render(); autoSay(); }
+
+/* A whole scene, in order. The first time, it's played through as a model (both sides spoken), then he takes his part. */
+function historyFor(i, j) {
+  const lines = [];
+  for (const st of SCENES[i].steps.slice(0, j)) {
+    if (st.ask) lines.push({ who: 'you', text: fill(st.ask) }, { who: 'them', text: fill(st.answer) });
+    else lines.push({ who: 'them', text: fill(st.them) }, { who: 'you', text: fill(st.you) });
+  }
+  return lines;
+}
+function buildScene(i) {
+  const L = state.levels.conversations, items = TOPIC.conversations.sets[i];
+  const kind = i + 1 === L ? 'current' : i + 1 < L ? 'easier' : 'stretch';
+  const pass = intro => items.map((w, j) => {
+    let p = makeProblem('conversations', i + 1, newSeed(), kind, w.fr);
+    if (intro) p = makeIntro(p);
+    p.history = historyFor(i, j);
+    return p;
+  });
+  return { probs: [...(items.some(w => !isSeen(w.fr)) ? pass(true) : []), ...pass(false)], i: 0, results: [], cleared: 0, learned: [], scene: i };
+}
+function startScene(i) { sess = buildScene(i); screen = 'play'; render(); autoSay(); }
 
 /* Quick check: a placement round. Two words from each main topic, earliest unknown words first, one try each.
    Right on the first try marks the word known; a miss just notes it was checked, with no review card. */
@@ -407,12 +497,18 @@ function buildCheck() {
   return { probs: shuffle(probs), i: 0, results: [], cleared: 0, learned: [], check: true };
 }
 function startCheck() { sess = buildCheck(); if (!sess.probs.length) return; screen = 'play'; render(); autoSay(); }
-function autoSay() { const p = sess.probs[sess.i]; say(p.prompt); }
+function linesFor(p) {
+  if (p.mode === 'intro') return p.convo ? (p.ask ? [[p.fr, KID_PITCH], [p.answer, p.pitch]] : [[p.them, p.pitch], [p.fr, KID_PITCH]]) : [[p.fr]];
+  if (p.convo) return p.ask ? [['À toi !']] : [[p.them, p.pitch]];
+  return [[p.prompt]];
+}
+function autoSay() { sayAll(linesFor(sess.probs[sess.i])); }
 const PRAISE = ['Bravo !', 'Oui !', 'Super !', 'Très bien !', "C'est ça !"];
 function gotIt(p) {
   p.done = true;
   p.praise = p.tries === 0 ? pick(PRAISE) : 'Oui, voilà !';
-  say(p.mode === 'say' || p.choices.find(c => c.ok)?.sentence ? p.praise : `${p.praise} ${p.fr} !`);
+  if (p.convo) sayAll([[p.praise], [p.fr, KID_PITCH]]);
+  else say(p.mode === 'say' || p.choices.find(c => c.ok)?.sentence ? p.praise : `${p.praise} ${p.fr} !`);
   record(p, p.tries === 0);
 }
 function missed(p) {
@@ -438,12 +534,15 @@ function answer(idx) {
 function sayCheck(ok) {
   const p = sess.probs[sess.i];
   if (p.done) return;
-  if (ok) { p.done = true; p.praise = pick(PRAISE); say(p.praise); record(p, true); }
-  else { p.done = true; p.revealed = true; record(p, false); }
+  // after his question, the character answers it
+  const reply = p.ask ? [[p.answer, p.pitch]] : [];
+  if (ok) { p.done = true; p.praise = pick(PRAISE); sayAll([[p.praise], ...reply]); record(p, true); }
+  else { p.done = true; p.revealed = true; sayAll([[p.fr, p.convo ? KID_PITCH : 1], ...reply]); record(p, false); }
   render();
 }
 function record(p, first) {
   sess.results.push(first);
+  p.result = first;
   if (p.kind === 'check') {
     const w = state.words[p.wid] = state.words[p.wid] || { r: 0, m: 0 };
     w.c = 1;
@@ -457,7 +556,7 @@ function record(p, first) {
     const before = isKnown(p.wid), w = state.words[p.wid] = state.words[p.wid] || { r: 0, m: 0 };
     if (first) w.r = Math.min(20, (w.r || 0) + 1); else { w.m = Math.min(20, (w.m || 0) + 1); w.k = 0; }
     w.t = Date.now();
-    if (!before && isKnown(p.wid) && !sess.learned.some(x => x.fr === p.wid)) sess.learned.push({ fr: p.wid, pic: p.pic, en: p.en });
+    if (!before && isKnown(p.wid) && !sess.learned.some(x => x.fr === p.fr)) sess.learned.push({ fr: p.fr, pic: p.pic, en: p.en });
   }
   if (p.kind === 'current') state.rec[p.topic] = [...(state.rec[p.topic] || []), first].slice(-10);
   if (p.kind === 'stretch') state.stretch[p.topic] = [...(state.stretch[p.topic] || []), first].slice(-5);
@@ -482,6 +581,8 @@ function reviewCard(id, first) {
   c.due = startOfDay() + DAY * REVIEW_DAYS[c.box];
 }
 function next() {
+  const cur = sess.probs[sess.i];
+  if (cur.mode === 'intro') { state.words[cur.wid] = state.words[cur.wid] || { r: 0, m: 0 }; save(); }
   if (sess.i < sess.probs.length - 1) { sess.i++; render(); autoSay(); return; }
   const used = [...new Set(sess.probs.map(p => p.topic))];
   if (sess.check) { levelFromKnown(); lastChanges = []; save(); screen = 'done'; render(); say(`Bravo${childName() ? ', ' + childName() : ''} !`); return; }
@@ -551,7 +652,7 @@ function importWords(text) {
 }
 
 /* ---------- rendering ---------- */
-const KIND_LABEL = { check: ' · <b class="tag easier">Quick check</b>', again: ' · <b class="tag again">Encore une fois</b>', easier: ' · <b class="tag easier">Révision</b>', stretch: ' · <b class="tag stretch">★ Nouveau mot</b>' };
+const KIND_LABEL = { intro: ' · <b class="tag stretch">Nouveau</b>', check: ' · <b class="tag easier">Quick check</b>', again: ' · <b class="tag again">Encore une fois</b>', easier: ' · <b class="tag easier">Révision</b>', stretch: ' · <b class="tag stretch">★ Nouveau</b>' };
 const app = document.getElementById('app');
 const speakerIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19.5 5.5a9 9 0 0 1 0 13"/></svg>';
 function tallySvg(filled) {
@@ -604,6 +705,11 @@ function renderHome() {
     <div class="tally" role="img" aria-label="${known} French words known">${tally}</div>
   </section>
   <section>
+    <h2>On discute !</h2>
+    <p class="note">Play a whole conversation. ${esc(childName() || 'Your child')} answers the character, and sometimes asks the questions.</p>
+    <div class="scenes">${SCENES.slice(0, Math.min(SCENES.length, state.levels.conversations + 1)).map((sc, i) => `<button class="scene-btn" data-act="scene" data-i="${i}"><span class="emo">${sc.who}</span>${esc(sc.title)}${i + 1 > state.levels.conversations ? ' <small>★ nouveau</small>' : ''}</button>`).join('')}</div>
+  </section>
+  <section>
     <h2>On apprend quoi ?</h2>
     ${GROUPS.map(g => {
       const keys = g.keys.filter(k => k !== 'mesmots' || allItems(k).length);
@@ -616,25 +722,45 @@ function renderHome() {
   <p class="meta">${todayCount ? `${todayCount} questions so far today. ` : ''}${state.total} questions answered since the start.</p>`;
 }
 
+const KID = '🧒';
+function bubble(side, avatar, text, pitch, past) {
+  return `<div class="bubble ${side}${past ? ' past' : ''}"><span class="av">${avatar}</span><button class="text" data-act="line" data-t="${esc(text)}" data-p="${pitch}">${esc(text)}</button></div>`;
+}
+function convoBody(p) {
+  const them = (t, past) => bubble('them', p.who, t, p.pitch, past), you = (t, past) => bubble('you', KID, t, KID_PITCH, past);
+  const hist = (p.history || []).map(b => b.who === 'them' ? them(b.text, true) : you(b.text, true)).join('');
+  const intent = `<span class="intent">${picHtml(p.pic)}</span>`;
+  let cur;
+  if (p.mode === 'intro') cur = p.ask ? `<div class="intro-pic">${intent}</div>${you(p.fr)}${them(p.answer)}` : `${them(p.them)}<div class="intro-pic">${intent}</div>${you(p.fr)}`;
+  else if (p.ask) cur = `<div class="bubble you hint"><span class="av">${KID}</span><div class="text"><strong>À toi !</strong> ${intent}<small>${esc(p.hint)}</small></div></div>${p.done ? you(p.fr) + them(p.answer) : ''}`;
+  else cur = them(p.them) + (p.done ? you(p.fr) : '');
+  return `<div class="convo">${hist}${cur}</div>`;
+}
 function renderPlay() {
   const p = sess.probs[sess.i];
-  const ticks = sess.probs.map((_, j) => `<span class="${j < sess.results.length ? (sess.results[j] ? 'done' : 'miss') : j === sess.i ? 'now' : ''}"></span>`).join('');
+  const ticks = sess.probs.map((q, j) => `<span class="${q.mode === 'intro' ? (j <= sess.i ? 'intro' : 'intro-later') : q.result === true ? 'done' : q.result === false ? 'miss' : j === sess.i ? 'now' : ''}"></span>`).join('');
   const word = `<span class="word">${esc(p.fr)}</span><span class="how">${esc(p.en)}</span>`;
   let fb = '';
-  if (p.done && !p.revealed) fb = `<span class="big good">${esc(p.praise)}</span>${word}`;
+  if (p.mode === 'intro') fb = '';
+  else if (p.done && !p.revealed) fb = `<span class="big good">${esc(p.praise)}</span>${word}`;
   else if (p.revealed) fb = `<span class="big try">${p.mode === 'say' ? 'Pas encore. Écoute bien :' : 'Voilà :'}</span>${word}`;
   else if (p.tries && p.lastWrong) fb = `<span class="big try">${p.lastWrong.sentence ? 'Non : ' : "Ça, c'est "}${esc(p.lastWrong.fr)}${p.lastWrong.sentence ? '' : '.'}</span><span class="how">${esc(p.lastWrong.en)} · Essaie encore !</span>`;
   const last = sess.i === sess.probs.length - 1;
   let body, controls;
-  if (p.mode === 'say') {
-    body = `<div class="bigpic">${picHtml(p.pic)}</div><div class="prompt">${esc(p.prompt)} <span class="dim">Dis-le !</span></div>`;
+  if (p.mode === 'intro') {
+    body = p.convo ? `<div class="prompt"><span class="tag stretch">Écoute !</span></div>${convoBody(p)}`
+      : `<div class="prompt"><span class="tag stretch">Nouveau mot !</span></div><button class="intro-btn" data-act="intro-again" aria-label="Hear it again">${picHtml(p.pic)}</button><div class="feedback">${word}</div>`;
+    controls = `<p class="note center">${p.convo ? 'Listen to both sides. Tap a bubble to hear it again, and say it together.' : 'Tap the picture to hear it again, and say it together.'}</p>`;
+  } else if (p.mode === 'say') {
+    body = p.convo ? `${convoBody(p)}${p.ask ? '' : '<div class="prompt"><span class="dim">Réponds ! Dis-le !</span></div>'}`
+      : `<div class="bigpic">${picHtml(p.pic)}</div><div class="prompt">${esc(p.prompt)} <span class="dim">Dis-le !</span></div>`;
     controls = p.done ? '' : !p.heard
       ? `<div class="row-btns center"><button class="start" data-act="hear">${speakerIcon} Écoute</button></div><p class="note center">Say it out loud first, then listen.</p>`
       : `<div class="row-btns center"><button class="start" data-act="said-yes">✓ Je l'ai dit !</button><button class="ghost" data-act="said-no">Pas encore</button></div>
          <div class="feedback">${word}</div>`;
   } else {
     const correctIdx = p.choices.findIndex(c => c.ok);
-    body = `<div class="prompt">${p.lead ? `<span class="dim">${esc(p.lead)}</span> ` : ''}${esc(p.prompt)}</div>`;
+    body = p.convo ? convoBody(p) : `<div class="prompt">${p.lead ? `<span class="dim">${esc(p.lead)}</span> ` : ''}${esc(p.prompt)}</div>`;
     controls = `<div class="choices pics ${p.choices.length > 4 ? 'many-choices' : ''}">${p.choices.map((c, j) => {
       const cls = p.wrong.includes(j) ? 'no' : (p.done && j === correctIdx ? 'ok' : '');
       return `<button class="choice pic ${cls}" data-act="pick" data-i="${j}" ${p.done || p.wrong.includes(j) ? 'disabled' : ''} aria-label="Picture ${j + 1}"><span class="key">${j + 1}</span>${c.html}</button>`;
@@ -711,7 +837,7 @@ function renderDone() {
   ${roundNews()}
   ${ups.length ? `<section><h2>Niveau suivant</h2><ul class="ups">${ups.map(([k]) => `<li>${esc(topicName(k))}: now level ${state.levels[k]}, ${esc(levelsOf(k)[state.levels[k] - 1])}</li>`).join('')}</ul></section>` : ''}
   ${handsOn()}
-  <div class="row-btns"><button class="start" data-act="start">Encore !</button><button class="ghost" data-act="home">Accueil</button></div>`;
+  <div class="row-btns">${sess.scene != null ? `<button class="start" data-act="scene" data-i="${sess.scene}">Rejouer la scène</button><button class="ghost" data-act="start">Une partie</button>` : '<button class="start" data-act="start">Encore !</button>'}<button class="ghost" data-act="home">Accueil</button></div>`;
 }
 
 function renderParent() {
@@ -747,6 +873,7 @@ function renderParent() {
   <section>
     <h2>Settings</h2>
     ${nameForm("Child's name", 'Save')}
+    <div class="row-btns"><span>Age, for “J'ai ${esc(numFr(childAge()))} ans”</span><div class="stepper"><button data-act="age" data-d="-1" aria-label="Younger">−</button><span>${childAge()}</span><button data-act="age" data-d="1" aria-label="Older">+</button></div></div>
     <div class="row-btns"><span>Questions per round</span><div class="seg">${[5, 10, 15].map(n => `<button data-act="per" data-n="${n}" aria-pressed="${state.perSession === n}">${n}</button>`).join('')}</div></div>
     <div class="row-btns"><span>“Dis-le !” speaking turns</span><div class="seg"><button data-act="sayit" data-v="1" aria-pressed="${state.sayIt}">On</button><button data-act="sayit" data-v="0" aria-pressed="${!state.sayIt}">Off</button></div></div>
     <p class="note">For words already known, about 2 in 5 questions show a picture to name out loud. ${esc(childName() || 'Your child')} says it, taps to hear it, then taps whether it matched. You are the best judge of the accent!</p>
@@ -819,7 +946,7 @@ function renderReview() {
   return `<section>
     <h2>Coming back for review</h2>
     <p class="note">A missed word comes back tomorrow, then after 3, 7, 14 and 30 days while it keeps getting answered right. ${state.cleared ? `${state.cleared} learned for good so far.` : ''}</p>
-    ${cards.length ? `<ul class="list">${cards.slice(0, 12).map(c => `<li><span>${esc(c.wid || (TOPIC[c.topic] ? `${TOPIC[c.topic].fr}: ${levelsOf(c.topic)[c.level - 1] || ''}` : c.topic))}</span><span>${when(c.due)} · step ${c.box + 1} of ${REVIEW_DAYS.length}</span></li>`).join('')}</ul>${cards.length > 12 ? `<p class="note">and ${cards.length - 12} more</p>` : ''}` : '<p class="note">Nothing to review yet.</p>'}
+    ${cards.length ? `<ul class="list">${cards.slice(0, 12).map(c => `<li><span>${esc(c.wid ? fill(c.wid) : (TOPIC[c.topic] ? `${TOPIC[c.topic].fr}: ${levelsOf(c.topic)[c.level - 1] || ''}` : c.topic))}</span><span>${when(c.due)} · step ${c.box + 1} of ${REVIEW_DAYS.length}</span></li>`).join('')}</ul>${cards.length > 12 ? `<p class="note">and ${cards.length - 12} more</p>` : ''}` : '<p class="note">Nothing to review yet.</p>'}
   </section>`;
 }
 
@@ -855,7 +982,7 @@ function renderSync() {
 /* word sheet: pictures with outlined French words to color and trace */
 function printSheet() {
   const pool = [];
-  for (const k of onTopics()) if (!TOPIC[k].phrases && !TOPIC[k].numbers) pool.push(...eligible(k, state.levels[k]).filter(w => !w.pic.startsWith('n:')));
+  for (const k of onTopics()) if (!TOPIC[k].phrases && !TOPIC[k].numbers && !TOPIC[k].convo) pool.push(...eligible(k, state.levels[k]).filter(w => !w.pic.startsWith('n:')));
   const seen = new Set(), words = shuffle(pool).filter(w => !seen.has(w.fr) && seen.add(w.fr)).slice(0, 12);
   document.getElementById('print').innerHTML = `
     <header class="pp-head"><h1>${childName() ? `Les mots de ${esc(childName())}` : 'Mes mots'}</h1><span>${new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</span></header>
@@ -883,10 +1010,14 @@ app.addEventListener('click', e => {
   else if (act === 'check') startCheck();
   else if (act === 'pick') answer(+b.dataset.i);
   else if (act === 'next') next();
-  else if (act === 'say' || act === 'slow') { const p = sess.probs[sess.i]; say(p.mode === 'say' && (p.heard || p.done) ? p.fr : p.prompt, act === 'slow'); }
-  else if (act === 'hear') { const p = sess.probs[sess.i]; p.heard = true; say(p.fr); render(); }
+  else if (act === 'say' || act === 'slow') { const p = sess.probs[sess.i]; if (p.mode === 'say' && (p.heard || p.done)) say(p.fr, act === 'slow', p.convo ? KID_PITCH : 1); else sayAll(linesFor(p), act === 'slow'); }
+  else if (act === 'hear') { const p = sess.probs[sess.i]; p.heard = true; say(p.fr, false, p.convo ? KID_PITCH : 1); render(); }
+  else if (act === 'line') say(b.dataset.t, false, +b.dataset.p || 1);
+  else if (act === 'intro-again') say(sess.probs[sess.i].fr);
+  else if (act === 'scene') startScene(+b.dataset.i);
+  else if (act === 'age') { state.childAge = Math.max(2, Math.min(15, childAge() + +b.dataset.d)); save(); render(); }
   else if (act === 'said-yes') sayCheck(true);
-  else if (act === 'said-no') { const p = sess.probs[sess.i]; say(p.fr); sayCheck(false); }
+  else if (act === 'said-no') sayCheck(false);
   else if (act === 'speak') say(b.dataset.t);
   else if (act === 'home') { screen = 'home'; confirmWipe = false; wiped = false; confirmTopic = null; importMsg = null; render(); }
   else if (act === 'parent') { screen = 'parent'; render(); }

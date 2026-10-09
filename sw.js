@@ -1,12 +1,13 @@
 // Offline support. Bump VERSION whenever app files change so devices pick up the update.
-const VERSION = 'ardoise-v15';
+const VERSION = 'ardoise-v16';
 const SHELL = [
   './', 'index.html', 'styles.css', 'words.js', 'app.js', 'config.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  // cache: 'reload' skips the browser's HTTP cache, so a new version never installs stale files
+  e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', e => {
@@ -35,7 +36,7 @@ self.addEventListener('fetch', e => {
   // App files: try the network so updates arrive, fall back to the cache when offline.
   if (url.origin === self.location.origin) {
     e.respondWith(
-      fetch(e.request).then(res => {
+      fetch(e.request, { cache: 'no-cache' }).then(res => {
         if (res.ok) caches.open(VERSION).then(c => c.put(e.request, res.clone()));
         return res;
       }).catch(() => caches.match(e.request).then(hit => hit || caches.match('index.html')))

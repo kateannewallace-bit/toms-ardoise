@@ -1,6 +1,6 @@
 # Tom's Ardoise
 
-French for young kids who aren't reading yet, built on the same engine as [Tom's Chalkboard](https://github.com/kateannewallace-bit/toms-chalkboard), dressed in bleu marine, marinière stripes and French school cursive. Built for Tom and his little sister; each child gets a profile with their own progress, and family names for the scenes are set on the grown-ups page (they're stored with progress, not in the code).
+French for young kids who aren't reading yet, built on the same engine as [Tom's Chalkboard](https://github.com/kateannewallace-bit/toms-chalkboard), dressed in bleu marine, marinière stripes and French school cursive. Built for Tom and his little sister Persephone, who each have a profile with their own progress. Names, ages and the family members in the scenes can be changed on the grown-ups page.
 
 - **Teach, then ask:** anything new is shown and said first ("Nouveau mot !"), then asked a couple of questions later. A round brings in about four new things, each asked no more than twice.
 - **On discute !** Short everyday conversations (Renart the fox, Maman asking "ça va ?", playing with a sibling, dinner, an older sibling helping, the boulangerie, the park, school, Papa on the phone, a video call with a sibling who lives away, a dragon, bedtime). The character asks, the child taps the picture of the right reply and then says it, and sometimes asks the question. Scenes can be played start to finish, modelled first.

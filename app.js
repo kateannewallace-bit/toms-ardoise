@@ -130,7 +130,12 @@ function mergeFamily(a, b) {
   return out;
 }
 let family = normalizeFamily(loadLocal());
-if (!Object.keys(family.kids).length) family.kids.k1 = normalize(null);
+// A fresh install starts with Tom and Persephone set up; both can be renamed or removed on the grown-ups page.
+if (!Object.keys(family.kids).length) {
+  const family_ = { big: 'Olive', far: 'Poppy' };
+  family.kids.k1 = Object.assign(normalize(null), family_, { childName: 'Tom', childAge: 6, me: '👦', playmate: 'Persephone' });
+  family.kids.k2 = Object.assign(normalize(null), family_, { childName: 'Persephone', childAge: 3, me: '👧', playmate: 'Tom', perSession: 5 });
+}
 let activeId = '';
 try { activeId = localStorage.getItem(ACTIVE_KEY) || ''; } catch (e) {}
 if (!family.kids[activeId]) activeId = Object.keys(family.kids)[0];
@@ -936,7 +941,7 @@ function renderParent() {
       <label for="f-far">Older brother or sister who lives away (for the video call)</label>
       <input id="f-far" class="pick name-input" maxlength="24" placeholder="Name" autocomplete="off" value="${esc(state.far || '')}">
       <div class="row-btns"><button class="ghost" type="submit">Save names</button></div>
-      <p class="note">Names stay in your progress (and sync), not in the app's code. Left empty, the scenes use made-up children.</p>
+      <p class="note">Left empty, the scenes use made-up children.</p>
     </form>
     <div class="row-btns"><span>Age, for “J'ai ${esc(numFr(childAge()))} ans”</span><div class="stepper"><button data-act="age" data-d="-1" aria-label="Younger">−</button><span>${childAge()}</span><button data-act="age" data-d="1" aria-label="Older">+</button></div></div>
     <div class="row-btns"><span>Questions per round</span><div class="seg">${[5, 10, 15].map(n => `<button data-act="per" data-n="${n}" aria-pressed="${state.perSession === n}">${n}</button>`).join('')}</div></div>

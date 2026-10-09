@@ -402,7 +402,7 @@ le renne|reindeer|🦌` },
 
 // Something to do away from the screen, matched to what was practiced. {name} is the child's name.
 const HANDS = {
-  conversations: 'Play a scene for real with toys or puppets: you are the boulangère, Mamie on the phone or the dragon. Then swap, so {name} asks the questions.',
+  conversations: 'Play a scene for real with toys or puppets: you are the boulangère, Papa on the phone or the dragon. Then swap, so {name} asks the questions.',
   bonjour: 'Make French the family greeting today: "Bonjour !" at breakfast, "Merci !" at the table and "Bonne nuit !" at bedtime.',
   couleurs: 'Color hunt: call "Trouve quelque chose de rouge !" and race to touch something red. Then swap who calls.',
   nombres: 'Count the stairs in French on the way up, and back down. Play "Un, deux, trois, soleil !" (French Red Light, Green Light).',
@@ -450,12 +450,12 @@ const SCENES = [
     { ask: "Et toi, comment tu t'appelles ?", hint: 'Ask the fox his name.', pic: '❓📛', en: "And you, what's your name?", answer: "Moi, je m'appelle Renart !", type: 'askname' },
     { them: 'Au revoir, {name} !', you: 'Au revoir, Renart !', pic: '👋🚪', en: 'Goodbye, Renart!', type: 'bye' },
   ] },
-  { title: 'Ça va, Mamie ?', who: '👵', pitch: 1.05, steps: [
+  { title: 'Ça va, Maman ?', who: '👩', pitch: 1.1, steps: [
     { them: 'Bonjour ! Ça va ?', you: 'Ça va bien, merci !', pic: '😊👍', en: "I'm fine, thank you!", type: 'fine' },
-    { ask: 'Et toi, ça va ?', hint: 'Ask Mamie how she is.', pic: '❓😊', en: 'And you, how are you?', answer: 'Très bien, merci !', type: 'askhow' },
+    { ask: 'Et toi, ça va ?', hint: 'Ask Maman how she is.', pic: '❓😊', en: 'And you, how are you?', answer: 'Très bien, merci !', type: 'askhow' },
     { them: 'Tu as faim ?', you: "Oui, j'ai faim !", pic: '🤤🍽️', en: "Yes, I'm hungry!", type: 'hungry' },
     { them: 'Tu veux une crêpe ?', you: "Oui, s'il te plaît !", pic: '👍🙏', en: 'Yes, please!', type: 'yesplease' },
-    { them: 'Voilà !', you: 'Merci, Mamie !', pic: '🎁😊', en: 'Thank you, Mamie!', type: 'thanks' },
+    { them: 'Voilà !', you: 'Merci, Maman !', pic: '🎁😊', en: 'Thank you, Maman!', type: 'thanks' },
   ] },
   { title: 'Le chevalier', who: '🤺', pitch: 0.8, steps: [
     { them: 'Bonjour ! Quel âge as-tu ?', you: "J'ai {age} ans.", pic: '🎂{age}', en: "I'm {age}.", type: 'age' },
@@ -487,11 +487,11 @@ const SCENES = [
     { ask: 'Où sont les toilettes ?', hint: 'Ask where the toilet is.', pic: '❓🚽', en: 'Where is the toilet?', answer: "C'est par là !", type: 'askwhere' },
     { them: 'Ça va mieux ?', you: 'Oui, merci !', pic: '😊👍', en: 'Yes, thank you!', type: 'fine' },
   ] },
-  { title: 'Au téléphone', who: '👴', pitch: 0.7, steps: [
-    { them: "Allô ? C'est qui ?", you: "C'est {name} ! Bonjour, Papi !", pic: '📞🙋', en: "It's {name}! Hello, Papi!", type: 'phone' },
+  { title: 'Au téléphone', who: '👨', pitch: 0.8, steps: [
+    { them: "Allô ? C'est qui ?", you: "C'est {name} ! Bonjour, Papa !", pic: '📞🙋', en: "It's {name}! Hello, Papa!", type: 'phone' },
     { them: "Qu'est-ce que tu fais ?", you: 'Je dessine un dragon !', pic: '🎨🐉', en: "I'm drawing a dragon!", type: 'doing' },
-    { them: "Je t'aime ! Gros bisous !", you: 'Moi aussi ! Bisous, Papi !', pic: '❤️😘', en: 'Me too! Kisses, Papi!', type: 'love' },
-    { them: 'Au revoir !', you: 'Au revoir, Papi ! À bientôt !', pic: '👋📞', en: 'Goodbye, Papi! See you soon!', type: 'bye' },
+    { them: "Je t'aime ! Gros bisous !", you: 'Moi aussi ! Bisous, Papa !', pic: '❤️😘', en: 'Me too! Kisses, Papa!', type: 'love' },
+    { them: 'Au revoir !', you: 'Au revoir, Papa ! À bientôt !', pic: '👋📞', en: 'Goodbye, Papa! See you soon!', type: 'bye' },
   ] },
   { title: 'Le dragon', who: '🐉', pitch: 0.5, steps: [
     { them: 'Grrr ! Qui es-tu ?', you: 'Je suis {name}, le chevalier !', pic: '🤺📛', en: "I'm {name} the knight!", type: 'name' },

@@ -132,8 +132,8 @@ le bébé|baby|👶
 le garçon|boy|👦
 la fille|girl|👧
 la famille|family|👨‍👩‍👦
-la mamie|grandma|👵
-le papi|grandpa|👴
+la grand-mère|grandmother|👵
+le grand-père|grandfather|👴
 les amis|friends|🧑‍🤝‍🧑` },
 
   { id: 'vetements', fr: 'Les vêtements', en: 'Clothes', ask: 'ou', words: `
@@ -410,7 +410,7 @@ const HANDS = {
   animaux: 'Animal charades: act one out and ask "Qui suis-je ?" Then swap.',
   nourriture: 'At the next meal, ask for everything in French: "Du pain, s\'il te plaît !" "Merci !"',
   corps: 'Play "Jacques a dit" (Simon Says): "Jacques a dit : touche ton nez !" Sing "Alouette" and point to each part of the bird.',
-  famille: 'Look at family photos and name everyone: maman, papa, mamie, papi, le bébé.',
+  famille: 'Look at family photos and name everyone: maman, papa, la grand-mère, le grand-père, le bébé.',
   vetements: 'Sing "Promenons-nous dans les bois." The wolf names each thing he puts on: "Je mets mon chapeau !"',
   maison: 'Hide a toy and give clues in French: "Près de la porte… sous la chaise…"',
   jouets: 'Play shop with toys: "Je voudrais le dé, s\'il vous plaît." "Voilà !"',

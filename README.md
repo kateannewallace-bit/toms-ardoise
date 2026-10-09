@@ -6,7 +6,7 @@ French words for young kids who aren't reading yet, drawn on the same Waldorf-st
 - **Dis-le !** Words already known come back as speaking practice: see the picture, say it out loud, tap to hear it, then mark whether it matched.
 - **Topics:** greetings, colors, numbers to 100, shapes, animals, family, the body, food, clothes, home, toys and school, getting around, nature and weather, knights and tales, feelings, action words, little sentences ("une étoile verte", "trois chats", "le lapin est dans le chapeau"), a word set for each month's festival, and your own words.
 - **Levels:** each level adds a set of about 6 words. Missed words come back after 1, 3, 7, 14 and 30 days.
-- **Bring in prior progress:** paste a list of known words (French or English, from Studycat or anywhere) on the grown-ups page.
+- **Find out what's known:** a quick check asks 20 words across the main topics, one try each, and marks every right answer as known. Each check asks new words. You can also paste a word list or tap known words on the grown-ups page.
 - Ends each round with a French cheer and an off-screen idea (songs, Jacques a dit, seasonal festivals). The grown-ups page has levels, known words, your own words, tricky words, a printable word sheet and sync.
 
 ## Run it

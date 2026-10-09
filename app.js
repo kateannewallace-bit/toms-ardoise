@@ -288,7 +288,7 @@ function distractors(k, L, target) {
 function genWord(k, L, kind, fr, avoid = new Set()) {
   const target = (fr && findItem(k, fr)) || pickTarget(k, L, kind, avoid);
   const p = { wid: target.fr, fr: target.fr, en: target.en, pic: target.pic };
-  if (state.sayIt && kind !== 'stretch' && isKnown(target.fr) && rng() < 0.4) {
+  if (state.sayIt && kind !== 'stretch' && kind !== 'check' && isKnown(target.fr) && rng() < 0.4) {
     return Object.assign(p, { mode: 'say', prompt: sayAsk(k), choices: [] });
   }
   const choices = [target, ...distractors(k, L, target)].map(w => ({ html: picHtml(w.pic), fr: w.fr, en: w.en, ok: w === target }));
@@ -391,6 +391,22 @@ function buildSession() {
   return { probs, i: 0, results: [], cleared: 0, learned: [] };
 }
 function startSession() { sess = buildSession(); screen = 'play'; render(); autoSay(); }
+
+/* Quick check: a placement round. Two words from each main topic, earliest unknown words first, one try each.
+   Right on the first try marks the word known; a miss just notes it was checked, with no review card. */
+const CHECK_TOPICS = ['bonjour', 'couleurs', 'nombres', 'animaux', 'famille', 'corps', 'nourriture', 'vetements', 'jouets', 'transports'];
+function buildCheck() {
+  const probs = [];
+  for (const k of shuffle(CHECK_TOPICS)) {
+    const sets = TOPIC[k].sets;
+    const cands = sets.flatMap((set, i) => set.map(w => ({ w, L: i + 1 }))).filter(x => !isKnown(x.w.fr));
+    const fresh = cands.filter(x => !rec(x.w.fr)?.c);
+    const pool = (fresh.length >= 2 ? fresh : cands).slice(0, SET_SIZE);
+    for (const x of shuffle(pool).slice(0, 2)) probs.push(makeProblem(k, Math.max(2, x.L), newSeed(), 'check', x.w.fr));
+  }
+  return { probs: shuffle(probs), i: 0, results: [], cleared: 0, learned: [], check: true };
+}
+function startCheck() { sess = buildCheck(); if (!sess.probs.length) return; screen = 'play'; render(); autoSay(); }
 function autoSay() { const p = sess.probs[sess.i]; say(p.prompt); }
 const PRAISE = ['Bravo !', 'Oui !', 'Super !', 'Très bien !', "C'est ça !"];
 function gotIt(p) {
@@ -401,7 +417,7 @@ function gotIt(p) {
 }
 function missed(p) {
   p.tries++;
-  if (p.tries >= 2) { p.done = true; p.revealed = true; record(p, false); return true; }
+  if (p.tries >= (p.kind === 'check' ? 1 : 2)) { p.done = true; p.revealed = true; record(p, false); return true; }
   save();
   return false;
 }
@@ -428,6 +444,13 @@ function sayCheck(ok) {
 }
 function record(p, first) {
   sess.results.push(first);
+  if (p.kind === 'check') {
+    const w = state.words[p.wid] = state.words[p.wid] || { r: 0, m: 0 };
+    w.c = 1;
+    if (first) { w.k = 1; sess.learned.push({ fr: p.wid, pic: p.pic, en: p.en }); }
+    save();
+    return;
+  }
   state.total++;
   state.done[p.topic] = (state.done[p.topic] || 0) + 1;
   if (p.wid) {
@@ -461,6 +484,7 @@ function reviewCard(id, first) {
 function next() {
   if (sess.i < sess.probs.length - 1) { sess.i++; render(); autoSay(); return; }
   const used = [...new Set(sess.probs.map(p => p.topic))];
+  if (sess.check) { levelFromKnown(); lastChanges = []; save(); screen = 'done'; render(); say(`Bravo${childName() ? ', ' + childName() : ''} !`); return; }
   lastChanges = adjustLevels(used);
   state.sessions.unshift({ d: new Date().toISOString(), score: sess.results.filter(Boolean).length, n: sess.results.length, skills: used, learned: sess.learned.length });
   state.sessions = state.sessions.slice(0, 40);
@@ -527,7 +551,7 @@ function importWords(text) {
 }
 
 /* ---------- rendering ---------- */
-const KIND_LABEL = { again: ' · <b class="tag again">Encore une fois</b>', easier: ' · <b class="tag easier">Révision</b>', stretch: ' · <b class="tag stretch">★ Nouveau mot</b>' };
+const KIND_LABEL = { check: ' · <b class="tag easier">Quick check</b>', again: ' · <b class="tag again">Encore une fois</b>', easier: ' · <b class="tag easier">Révision</b>', stretch: ' · <b class="tag stretch">★ Nouveau mot</b>' };
 const app = document.getElementById('app');
 const speakerIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19.5 5.5a9 9 0 0 1 0 13"/></svg>';
 function tallySvg(filled) {
@@ -587,6 +611,7 @@ function renderHome() {
       <div class="chips">${keys.map(k => `<button class="chip" data-act="chip" data-k="${k}" aria-pressed="${!!state.on[k]}"><strong>${esc(topicName(k))}</strong><small>${esc(TOPIC[k].en)} · level ${Math.min(state.levels[k], maxLevel(k))}</small>${levelBar(k)}</button>`).join('')}</div></div>`;
     }).join('')}
   </section>
+  ${!state.total && !knownCount() ? `<p class="note">First time? A grown-up can start with a <button class="link inline-link" data-act="check">quick check</button> to find the words ${esc(childName() || 'your child')} already knows.</p>` : ''}
   <button class="start" data-act="start">On y va ! <small>${state.perSession} questions</small></button>
   <p class="meta">${todayCount ? `${todayCount} questions so far today. ` : ''}${state.total} questions answered since the start.</p>`;
 }
@@ -656,7 +681,22 @@ function pickCheer(tier) {
   lastCheer = c[0] + c[1];
   return { tier, head: c[0], line: c[1] };
 }
+function renderCheckDone() {
+  const known = sess.learned, missed = sess.probs.filter((p, i) => !sess.results[i]);
+  const chips = (list, on) => `<div class="wordchips">${list.map(w => `<button class="wchip" data-act="speak" data-t="${esc(w.fr)}" aria-pressed="${on}"><span class="wpic">${picHtml(w.pic)}</span>${esc(w.fr)} <small>${esc(w.en)}</small></button>`).join('')}</div>`;
+  return `
+  <div class="done-text">
+    <h1>${esc(greet('Bravo'))}</h1>
+    <p class="cheer">Quick check done: ${known.length} of ${sess.results.length} words known.</p>
+    <div class="stars">${sess.results.map(starSvg).join('')}</div>
+  </div>
+  ${known.length ? `<section><h2>Already knows</h2>${chips(known, true)}<p class="note">These are marked known. They skip ahead and come back as “Dis-le !” speaking practice.</p></section>` : ''}
+  ${missed.length ? `<section><h2>Not yet</h2>${chips(missed, false)}<p class="note">No harm done: these will be taught in normal rounds. Tap any word to hear it.</p></section>` : ''}
+  <p class="note">Each check asks different words, so another one or two builds a fuller picture. Levels update on their own.</p>
+  <div class="row-btns"><button class="start" data-act="check">Check more words</button><button class="ghost" data-act="home">Home</button></div>`;
+}
 function renderDone() {
+  if (sess.check) return renderCheckDone();
   const score = sess.results.filter(Boolean).length, n = sess.results.length;
   const pct = n ? score / n : 0, tier = pct >= 0.9 ? 0 : pct >= 0.7 ? 1 : pct >= 0.4 ? 2 : 3;
   if (!sess.cheer || sess.cheer.tier !== tier) sess.cheer = pickCheer(tier);
@@ -694,6 +734,8 @@ function renderParent() {
     <textarea id="import-text" class="pick import-box" rows="4" placeholder="chat, chien, rouge, bleu, 1-10, bonjour, apple, banana…"></textarea>
     <div class="row-btns"><button class="ghost" data-act="import">Mark these as known</button></div>
     ${importMsg ? `<p class="note">${importMsg}</p>` : ''}
+    <p class="note"><strong>Or let the app find out:</strong> a quick check asks 20 words across the main topics, one try each, no hints. Every word answered right is marked known.</p>
+    <div class="row-btns"><button class="ghost" data-act="check">Start a quick check</button></div>
     ${renderKnownLists()}
   </section>
   <section>
@@ -838,6 +880,7 @@ app.addEventListener('click', e => {
   if (!b) return;
   const act = b.dataset.act;
   if (act === 'start') startSession();
+  else if (act === 'check') startCheck();
   else if (act === 'pick') answer(+b.dataset.i);
   else if (act === 'next') next();
   else if (act === 'say' || act === 'slow') { const p = sess.probs[sess.i]; say(p.mode === 'say' && (p.heard || p.done) ? p.fr : p.prompt, act === 'slow'); }

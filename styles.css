@@ -258,3 +258,4 @@ input:focus-visible, select:focus-visible { outline: 3px solid var(--yellow); ou
 .custom-form input { width: 9em; }
 .custom-form .emoji-input { width: 4.5em; text-align: center; }
 small.inline { display: inline; color: var(--chalk-dim); font-size: .85rem; }
+.link.inline-link { padding: 0; font-size: inherit; }

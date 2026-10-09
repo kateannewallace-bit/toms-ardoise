@@ -291,3 +291,8 @@ small.inline { display: inline; color: var(--chalk-dim); font-size: .85rem; }
 .intro-btn .numeral { font-size: clamp(4.5rem, 18vw, 6.5rem); }
 .ticks span.intro { background: var(--blue); }
 .ticks span.intro-later { background: rgba(159,203,233,.25); }
+.kids { display: flex; flex-wrap: wrap; gap: 10px; }
+.kid { display: inline-flex; align-items: center; gap: 8px; background: transparent; border: 2px solid rgba(247,242,232,.25); border-radius: 999px; padding: 4px 16px 4px 8px; font-weight: 700; font-size: 1.1rem; }
+.kid .emo { font-size: 1.8rem; }
+.kid[aria-pressed="true"] { border-color: var(--rouge); background: rgba(230,57,70,.15); }
+.cast-input { width: min(100%, 26em); }

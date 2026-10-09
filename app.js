@@ -13,7 +13,15 @@ const N = () => childName() || 'your child';
 // In French lines, a child with no name set is "Pip".
 const frName = () => childName() || 'Pip';
 const childAge = () => Math.max(2, Math.min(15, +state.childAge || 6));
-const fill = (s, digits) => String(s).replace(/\{name\}/g, frName()).replace(/\{age\}/g, digits ? String(childAge()) : numFr(childAge()));
+// Family names for the scenes, set on the grown-ups page. With none set, the scenes use made-up children.
+const sibName = () => (state.playmate || '').trim() || 'Léo';
+const bigName = () => (state.big || '').trim() || 'Lou';
+const farName = () => (state.far || '').trim() || 'Jade';
+const fill = (s, digits) => String(s).replace(/\{name\}/g, frName()).replace(/\{age\}/g, digits ? String(childAge()) : numFr(childAge()))
+  .replace(/\{sib\}/g, sibName()).replace(/\{big\}/g, bigName()).replace(/\{far\}/g, farName());
+// The playmate's picture is their own profile picture when they have one here.
+const sceneWho = sc => sc.who === '{sib}' ? (Object.values(family.kids).find(k => k !== state && (k.childName || '').trim().toLowerCase() === sibName().toLowerCase())?.me || '🙂') : sc.who;
+const me = () => state.me || '🧒';
 const greet = s => childName() ? `${s}, ${childName()} !` : `${s} !`;
 
 /* ---------- numbers in French ---------- */
@@ -28,7 +36,7 @@ function numFr(n) {
   return n === 80 ? 'quatre-vingts' : `quatre-vingt-${UNITS[n - 80]}`;
 }
 const range = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
-const NUMBER_SETS = [range(1, 5), range(6, 10), range(11, 16), range(17, 20), range(3, 10).map(t => t * 10), range(21, 69).filter(n => n % 10), range(70, 99)];
+const NUMBER_SETS = [range(1, 5), range(6, 10), range(11, 16), range(17, 20), range(3, 10).map(t => t * 10), range(21, 69).filter(n => n % 10), range(70, 99).filter(n => n % 10)];
 const NUMBER_LEVELS = ['un à cinq', 'six à dix', 'onze à seize', 'dix-sept à vingt', 'trente, quarante… cent', '21 à 69', '70 à 99 (soixante-dix, quatre-vingts)'];
 
 /* ---------- vocabulary: topics split into sets of 6 words, one set per level ---------- */
@@ -57,7 +65,7 @@ function buildVocab() {
     if (t.convo) {
       // each scene is one level; its items are the child's lines, keyed by their unfilled text
       t.sets = SCENES.map((sc, i) => sc.steps.map((st, j) => ({ fr: st.you || st.ask, en: st.en, pic: st.pic, scene: i, step: j })));
-      t.levels = SCENES.map(sc => `${sc.who} ${sc.title}`);
+      t.levels = SCENES.map(sc => `${sceneWho(sc)} ${fill(sc.title)}`);
       continue;
     }
     if (t.numbers) {
@@ -83,7 +91,7 @@ function defaultState() {
   return {
     levels: Object.fromEntries(ORDER.map(k => [k, 1])),
     on: { conversations: true, couleurs: true, nombres: true, animaux: true },
-    childAge: 6,
+    childAge: 6, me: '🧒', playmate: '', big: '', far: '',
     rec: {}, stretch: {}, mastered: {}, words: {}, cards: [], cleared: 0, custom: [],
     sessions: [], log: [], done: {}, total: 0, perSession: 10, sayIt: true, speed: 'normal', updatedAt: 0,
   };
@@ -101,8 +109,53 @@ const CODE_KEY = 'toms-ardoise-sync-code';
 const CFG = window.ARDOISE_CONFIG || {};
 const syncAvailable = !!(CFG.supabaseUrl && CFG.supabaseKey && window.crypto?.subtle);
 function loadLocal() { try { const t = localStorage.getItem(LS_KEY); return t ? JSON.parse(t) : null; } catch (e) { return null; } }
-function saveLocal() { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {} }
-let state = normalize(loadLocal());
+function saveLocal() { try { localStorage.setItem(LS_KEY, JSON.stringify(family)); } catch (e) {} }
+/* One family, several children: each child has their own progress and settings (the "state" used everywhere).
+   Which child is playing is remembered per device; everything else syncs. Removed children leave a tombstone so sync doesn't bring them back. */
+const ACTIVE_KEY = 'toms-ardoise-active';
+function normalizeFamily(raw) {
+  if (!raw) return { kids: {}, removed: {}, updatedAt: 0 };
+  if (raw.levels) return { kids: { k1: normalize(raw) }, removed: {}, updatedAt: raw.updatedAt || 0 }; // an older single-child save
+  const kids = {};
+  for (const [id, k] of Object.entries(raw.kids || {})) kids[id] = normalize(k);
+  return { kids, removed: raw.removed || {}, updatedAt: raw.updatedAt || 0 };
+}
+function mergeFamily(a, b) {
+  const out = { kids: {}, removed: { ...a.removed, ...b.removed }, updatedAt: Math.max(a.updatedAt, b.updatedAt) };
+  for (const id of new Set([...Object.keys(a.kids), ...Object.keys(b.kids)])) {
+    if (out.removed[id]) continue;
+    const x = a.kids[id], y = b.kids[id];
+    out.kids[id] = !x ? y : !y ? x : (y.updatedAt || 0) > (x.updatedAt || 0) ? y : x;
+  }
+  return out;
+}
+let family = normalizeFamily(loadLocal());
+if (!Object.keys(family.kids).length) family.kids.k1 = normalize(null);
+let activeId = '';
+try { activeId = localStorage.getItem(ACTIVE_KEY) || ''; } catch (e) {}
+if (!family.kids[activeId]) activeId = Object.keys(family.kids)[0];
+let state = family.kids[activeId];
+function useKid(id) {
+  activeId = family.kids[id] ? id : Object.keys(family.kids)[0];
+  try { localStorage.setItem(ACTIVE_KEY, activeId); } catch (e) {}
+  state = family.kids[activeId];
+  buildVocab();
+}
+function addKid(name, age) {
+  const id = newSeed().toString(36), kid = normalize(null);
+  // a new child plays with the child who's already here, and shares the older brothers and sisters
+  Object.assign(kid, { childName: name, childAge: age, perSession: age <= 4 ? 5 : 10, playmate: state.childName || '', big: state.big || '', far: state.far || '', updatedAt: Date.now() });
+  family.kids[id] = kid;
+  useKid(id);
+  save();
+}
+function removeKid(id) {
+  if (Object.keys(family.kids).length < 2) return;
+  delete family.kids[id];
+  family.removed[id] = Date.now();
+  if (id === activeId) useKid(Object.keys(family.kids)[0]);
+  save();
+}
 buildVocab();
 const sync = { code: '', key: '', status: 'off', lastAt: 0, saving: false, dirty: false, error: '' };
 try { sync.code = localStorage.getItem(CODE_KEY) || ''; } catch (e) {}
@@ -137,7 +190,7 @@ async function pushRemote() {
   if (!sync.key) return;
   if (sync.saving) { sync.dirty = true; return; }
   sync.saving = true;
-  try { await rpc('chalkboard_save', { p_key: sync.key, p_data: state }); sync.status = 'ok'; sync.lastAt = Date.now(); sync.error = ''; }
+  try { await rpc('chalkboard_save', { p_key: sync.key, p_data: family }); sync.status = 'ok'; sync.lastAt = Date.now(); sync.error = ''; }
   catch (e) { sync.status = 'error'; sync.error = navigator.onLine === false ? 'offline' : String(e.message || e); }
   sync.saving = false;
   if (screen === 'parent') render();
@@ -148,11 +201,10 @@ async function pullRemote() {
   try {
     const remote = await rpc('chalkboard_get', { p_key: sync.key });
     sync.status = 'ok'; sync.lastAt = Date.now(); sync.error = '';
-    if (remote && (remote.updatedAt || 0) > (state.updatedAt || 0)) {
-      state = normalize(remote);
-      buildVocab();
-      saveLocal();
-    } else if (!remote || (state.updatedAt || 0) > (remote.updatedAt || 0)) pushRemote();
+    const theirs = normalizeFamily(remote), merged = mergeFamily(family, theirs);
+    const changedHere = JSON.stringify(merged) !== JSON.stringify(family), behindThere = !remote || JSON.stringify(merged.kids) !== JSON.stringify(theirs.kids);
+    if (changedHere) { family = merged; useKid(activeId); saveLocal(); }
+    if (behindThere) { family.updatedAt = Date.now(); saveLocal(); pushRemote(); }
   } catch (e) { sync.status = 'error'; sync.error = navigator.onLine === false ? 'offline' : String(e.message || e); }
   if (screen === 'home' || screen === 'parent') render();
 }
@@ -167,7 +219,7 @@ function stopSync() {
   sync.code = ''; sync.key = ''; sync.status = 'off';
   try { localStorage.removeItem(CODE_KEY); } catch (e) {}
 }
-function save() { state.updatedAt = Date.now(); saveLocal(); pushRemote(); }
+function save() { state.updatedAt = family.updatedAt = Date.now(); family.kids[activeId] = state; saveLocal(); pushRemote(); }
 function initSync() {
   if (!syncAvailable) return;
   if (sync.code) startSync(sync.code);
@@ -361,7 +413,7 @@ const YES_NO = /^(oui|non|d'accord|oh oui)/i;
 function genConvo(L, kind, fr, avoid = new Set(), gate) {
   const item = (fr && findItem('conversations', fr)) || pickTarget('conversations', L, kind, avoid, gate);
   const sc = SCENES[item.scene], st = sc.steps[item.step];
-  const p = { convo: true, scene: item.scene, step: item.step, wid: item.fr, who: sc.who, pitch: sc.pitch,
+  const p = { convo: true, scene: item.scene, step: item.step, wid: item.fr, who: sceneWho(sc), pitch: sc.pitch,
     fr: fill(st.you || st.ask), en: fill(st.en), pic: fill(st.pic, true), them: st.them && fill(st.them), ask: !!st.ask, hint: st.hint, answer: st.answer && fill(st.answer), prompt: st.them ? fill(st.them) : 'À toi !', choices: [] };
   if (st.ask || (state.sayIt && kind !== 'stretch' && kind !== 'check' && isKnown(item.fr) && rng() < 0.4)) return Object.assign(p, { mode: 'say' });
   const pool = SCENES.slice(0, Math.max(L + 2, 4)).flatMap(s => s.steps).filter(x => x.you && x.type !== st.type && x.pic !== st.pic && !(YES_NO.test(st.you) && YES_NO.test(x.you)));
@@ -384,6 +436,7 @@ function makeProblem(k, level = state.levels[k], seed = newSeed(), kind = 'curre
 }
 
 /* ---------- session ---------- */
+let confirmKid = null;
 let screen = 'home', sess = null, lastChanges = [], confirmWipe = false, wiped = false, confirmTopic = null, importMsg = null;
 /* Each round mixes four kinds of problems, just like the Chalkboard:
    - spaced review of missed words, due today (up to 30% of the round)
@@ -698,6 +751,7 @@ function renderHome() {
   const noVoice = canSpeak && !voices.length;
   return `
   <header class="top"><h1>${esc(greet('Bonjour'))}</h1><button class="link" data-act="parent">For grown-ups</button></header>
+  ${Object.keys(family.kids).length > 1 ? `<div class="kids" role="group" aria-label="Qui joue ?">${Object.entries(family.kids).map(([id, k]) => `<button class="kid" data-act="kid" data-id="${id}" aria-pressed="${id === activeId}"><span class="emo">${k.me || '🧒'}</span>${esc(k.childName || '?')}</button>`).join('')}</div>` : ''}
   ${childName() ? '' : nameForm("Who's learning French?", 'Start')}
   ${noVoice ? '<p class="note danger-text">No French voice found on this device yet. See the grown-ups page.</p>' : ''}
   <section>
@@ -707,7 +761,7 @@ function renderHome() {
   <section>
     <h2>On discute !</h2>
     <p class="note">Play a whole conversation. ${esc(childName() || 'Your child')} answers the character, and sometimes asks the questions.</p>
-    <div class="scenes">${SCENES.slice(0, Math.min(SCENES.length, state.levels.conversations + 1)).map((sc, i) => `<button class="scene-btn" data-act="scene" data-i="${i}"><span class="emo">${sc.who}</span>${esc(sc.title)}${i + 1 > state.levels.conversations ? ' <small>★ nouveau</small>' : ''}</button>`).join('')}</div>
+    <div class="scenes">${SCENES.slice(0, Math.min(SCENES.length, state.levels.conversations + 1)).map((sc, i) => `<button class="scene-btn" data-act="scene" data-i="${i}"><span class="emo">${sceneWho(sc)}</span>${esc(fill(sc.title))}${i + 1 > state.levels.conversations ? ' <small>★ nouveau</small>' : ''}</button>`).join('')}</div>
   </section>
   <section>
     <h2>On apprend quoi ?</h2>
@@ -722,17 +776,16 @@ function renderHome() {
   <p class="meta">${todayCount ? `${todayCount} questions so far today. ` : ''}${state.total} questions answered since the start.</p>`;
 }
 
-const KID = '🧒';
 function bubble(side, avatar, text, pitch, past) {
   return `<div class="bubble ${side}${past ? ' past' : ''}"><span class="av">${avatar}</span><button class="text" data-act="line" data-t="${esc(text)}" data-p="${pitch}">${esc(text)}</button></div>`;
 }
 function convoBody(p) {
-  const them = (t, past) => bubble('them', p.who, t, p.pitch, past), you = (t, past) => bubble('you', KID, t, KID_PITCH, past);
+  const them = (t, past) => bubble('them', p.who, t, p.pitch, past), you = (t, past) => bubble('you', me(), t, KID_PITCH, past);
   const hist = (p.history || []).map(b => b.who === 'them' ? them(b.text, true) : you(b.text, true)).join('');
   const intent = `<span class="intent">${picHtml(p.pic)}</span>`;
   let cur;
   if (p.mode === 'intro') cur = p.ask ? `<div class="intro-pic">${intent}</div>${you(p.fr)}${them(p.answer)}` : `${them(p.them)}<div class="intro-pic">${intent}</div>${you(p.fr)}`;
-  else if (p.ask) cur = `<div class="bubble you hint"><span class="av">${KID}</span><div class="text"><strong>À toi !</strong> ${intent}<small>${esc(p.hint)}</small></div></div>${p.done ? you(p.fr) + them(p.answer) : ''}`;
+  else if (p.ask) cur = `<div class="bubble you hint"><span class="av">${me()}</span><div class="text"><strong>À toi !</strong> ${intent}<small>${esc(fill(p.hint))}</small></div></div>${p.done ? you(p.fr) + them(p.answer) : ''}`;
   else cur = them(p.them) + (p.done ? you(p.fr) : '');
   return `<div class="convo">${hist}${cur}</div>`;
 }
@@ -853,7 +906,8 @@ function renderParent() {
       <button class="ghost" data-act="try-voice">Try it</button></div>
     <p class="note">${voices.length ? '' : '<strong class="danger-text">No French voice is installed on this device yet.</strong> '}On an iPad or iPhone: Settings → Accessibility → Spoken Content → Voices → French. Download an “Enhanced” or “Premium” voice (Thomas, Audrey and Aurélie speak French from France; Amélie is from Québec), then pick it here. The choice is remembered on each device.</p>`;
   return `
-  <header class="top"><h1>For grown-ups</h1><button class="ghost" data-act="home">${childName() ? `Back to ${esc(childName())}` : 'Back'}</button></header>
+  <header class="top"><h1>For grown-ups${Object.keys(family.kids).length > 1 && childName() ? ` · ${esc(childName())}` : ''}</h1><button class="ghost" data-act="home">${childName() ? `Back to ${esc(childName())}` : 'Back'}</button></header>
+  ${renderKids()}
   <section>
     <h2>What ${esc(childName() || 'your child')} already knows</h2>
     <p class="note">Paste or type words from Studycat (or anywhere), separated by commas or new lines. French or English both work, with or without “le/la”. Number ranges like “1-10” work too. Known words skip ahead in their topic and come back as “Dis-le !” speaking practice.</p>
@@ -873,6 +927,17 @@ function renderParent() {
   <section>
     <h2>Settings</h2>
     ${nameForm("Child's name", 'Save')}
+    <div class="row-btns"><span>Picture</span><div class="seg">${['👦', '👧', '🧒'].map(e => `<button data-act="me" data-v="${e}" aria-pressed="${me() === e}">${e}</button>`).join('')}</div></div>
+    <form class="name-form" id="family-form">
+      <label for="f-sib">Brother or sister to play with (for “On joue ?”)</label>
+      <input id="f-sib" class="pick name-input" maxlength="24" placeholder="Name" autocomplete="off" value="${esc(state.playmate || '')}">
+      <label for="f-big">Older brother or sister at home</label>
+      <input id="f-big" class="pick name-input" maxlength="24" placeholder="Name" autocomplete="off" value="${esc(state.big || '')}">
+      <label for="f-far">Older brother or sister who lives away (for the video call)</label>
+      <input id="f-far" class="pick name-input" maxlength="24" placeholder="Name" autocomplete="off" value="${esc(state.far || '')}">
+      <div class="row-btns"><button class="ghost" type="submit">Save names</button></div>
+      <p class="note">Names stay in your progress (and sync), not in the app's code. Left empty, the scenes use made-up children.</p>
+    </form>
     <div class="row-btns"><span>Age, for “J'ai ${esc(numFr(childAge()))} ans”</span><div class="stepper"><button data-act="age" data-d="-1" aria-label="Younger">−</button><span>${childAge()}</span><button data-act="age" data-d="1" aria-label="Older">+</button></div></div>
     <div class="row-btns"><span>Questions per round</span><div class="seg">${[5, 10, 15].map(n => `<button data-act="per" data-n="${n}" aria-pressed="${state.perSession === n}">${n}</button>`).join('')}</div></div>
     <div class="row-btns"><span>“Dis-le !” speaking turns</span><div class="seg"><button data-act="sayit" data-v="1" aria-pressed="${state.sayIt}">On</button><button data-act="sayit" data-v="0" aria-pressed="${!state.sayIt}">Off</button></div></div>
@@ -904,6 +969,20 @@ function renderParent() {
     ${wiped ? '<p class="note">Progress cleared. Everything starts fresh.</p>' : ''}
   </section>
   ${renderSync()}`;
+}
+
+function renderKids() {
+  const kids = Object.entries(family.kids);
+  return `<section>
+    <h2>Children</h2>
+    <p class="note">Each child has their own levels, words and settings. Pick who's playing on the home screen.</p>
+    <ul class="list">${kids.map(([id, k]) => `<li><span>${k.me || '🧒'} ${esc(k.childName || 'No name yet')}${id === activeId ? ' · <strong>playing now</strong>' : ''}</span><span>${id === activeId ? '' : `<button class="link small-link" data-act="kid" data-id="${id}">Switch</button> `}${kids.length > 1 ? (confirmKid === id ? `<button class="link small-link danger-text" data-act="kid-del-yes" data-id="${id}">Yes, remove</button> <button class="link small-link" data-act="kid-del-no">Cancel</button>` : `<button class="link small-link" data-act="kid-del" data-id="${id}">Remove</button>`) : ''}</span></li>`).join('')}</ul>
+    <form class="custom-form" id="kid-form">
+      <input id="k-name" class="pick" maxlength="24" placeholder="Name" autocomplete="off" aria-label="Child's name" required>
+      <input id="k-age" class="pick emoji-input" type="number" min="2" max="15" value="3" aria-label="Age" required>
+      <button class="ghost" type="submit">Add a child</button>
+    </form>
+  </section>`;
 }
 
 // One fold per topic with every word as a chip: tap to hear it and to mark it known or not.
@@ -1015,6 +1094,11 @@ app.addEventListener('click', e => {
   else if (act === 'line') say(b.dataset.t, false, +b.dataset.p || 1);
   else if (act === 'intro-again') say(sess.probs[sess.i].fr);
   else if (act === 'scene') startScene(+b.dataset.i);
+  else if (act === 'kid') { useKid(b.dataset.id); confirmKid = null; sess = null; render(); }
+  else if (act === 'kid-del') { confirmKid = b.dataset.id; render(); }
+  else if (act === 'kid-del-no') { confirmKid = null; render(); }
+  else if (act === 'kid-del-yes') { removeKid(b.dataset.id); confirmKid = null; render(); }
+  else if (act === 'me') { state.me = b.dataset.v; buildVocab(); save(); render(); }
   else if (act === 'age') { state.childAge = Math.max(2, Math.min(15, childAge() + +b.dataset.d)); save(); render(); }
   else if (act === 'said-yes') sayCheck(true);
   else if (act === 'said-no') sayCheck(false);
@@ -1058,7 +1142,7 @@ app.addEventListener('click', e => {
   else if (act === 'wipe') { confirmWipe = true; wiped = false; render(); }
   else if (act === 'wipe-no') { confirmWipe = false; render(); }
   else if (act === 'wipe-yes') {
-    const keep = { childName: state.childName, perSession: state.perSession, sayIt: state.sayIt, speed: state.speed, custom: state.custom };
+    const keep = { childName: state.childName, childAge: state.childAge, me: state.me, playmate: state.playmate, big: state.big, far: state.far, perSession: state.perSession, sayIt: state.sayIt, speed: state.speed, custom: state.custom };
     state = Object.assign(defaultState(), keep);
     buildVocab();
     confirmWipe = false; wiped = true; sess = null; lastChanges = [];
@@ -1083,9 +1167,23 @@ app.addEventListener('submit', e => {
     buildVocab(); save(); render(); say(fr);
     return;
   }
+  if (e.target.id === 'family-form') {
+    state.playmate = document.getElementById('f-sib').value.trim().slice(0, 24);
+    state.big = document.getElementById('f-big').value.trim().slice(0, 24);
+    state.far = document.getElementById('f-far').value.trim().slice(0, 24);
+    buildVocab(); save(); render();
+    return;
+  }
+  if (e.target.id === 'kid-form') {
+    const name = document.getElementById('k-name').value.trim().slice(0, 24), age = +document.getElementById('k-age').value || 3;
+    if (!name) return;
+    addKid(name, Math.max(2, Math.min(15, age)));
+    render();
+    return;
+  }
   if (e.target.id !== 'name-form') return;
   state.childName = (document.getElementById('child-name')?.value || '').trim().slice(0, 24);
-  save(); render();
+  buildVocab(); save(); render();
 });
 app.addEventListener('change', e => {
   if (e.target.id !== 'voice') return;

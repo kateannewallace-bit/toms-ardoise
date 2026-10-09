@@ -134,6 +134,8 @@ la fille|girl|👧
 la famille|family|👨‍👩‍👦
 la grand-mère|grandmother|👵
 le grand-père|grandfather|👴
+la sœur|sister|👭
+le frère|brother|👬
 les amis|friends|🧑‍🤝‍🧑` },
 
   { id: 'vetements', fr: 'Les vêtements', en: 'Clothes', ask: 'ou', words: `
@@ -442,7 +444,8 @@ const CHEERS = [
    them: what the character says. you: the child's reply. pic: a picture of the reply's meaning.
    type: what kind of reply it is. Wrong choices are always replies of another type, so only one picture answers the question.
    ask: a turn where the child asks the question (hint is for the grown-up); answer: what the character says back.
-   {name} and {age} become the child's name and age. pitch: how high the character's voice is. */
+   {name} and {age} become the child's name and age; {sib} is the brother or sister they play with, {big} an older one at home and {far} one who lives away (set on the grown-ups page).
+   who: '{sib}' means the playmate's own picture. pitch: how high the character's voice is. */
 const SCENES = [
   { title: 'Bonjour, Renart !', who: '🦊', pitch: 1.3, steps: [
     { them: 'Bonjour !', you: 'Bonjour, Renart !', pic: '👋😀', en: 'Hello, Renart!', type: 'greet' },
@@ -457,6 +460,12 @@ const SCENES = [
     { them: 'Tu veux une crêpe ?', you: "Oui, s'il te plaît !", pic: '👍🙏', en: 'Yes, please!', type: 'yesplease' },
     { them: 'Voilà !', you: 'Merci, Maman !', pic: '🎁😊', en: 'Thank you, Maman!', type: 'thanks' },
   ] },
+  { title: 'On joue, {sib} ?', who: '{sib}', pitch: 1.5, steps: [
+    { them: 'Tu veux jouer avec moi ?', you: 'Oui ! On joue à cache-cache ?', pic: '🙈😀', en: 'Yes! Shall we play hide-and-seek?', type: 'play' },
+    { them: 'Un, deux, trois… Où es-tu ?', you: 'Je suis là !', pic: '🫣👋', en: "I'm here!", type: 'here' },
+    { them: "C'est mon tour !", you: "D'accord, à toi !", pic: '👉🙂', en: 'OK, your turn!', type: 'turn' },
+    { ask: 'Tu veux un câlin ?', hint: 'Ask {sib} for a hug.', pic: '❓🤗', en: 'Do you want a hug?', answer: 'Oui ! Un gros câlin !', type: 'askhug' },
+  ] },
   { title: 'Le chevalier', who: '🤺', pitch: 0.8, steps: [
     { them: 'Bonjour ! Quel âge as-tu ?', you: "J'ai {age} ans.", pic: '🎂{age}', en: "I'm {age}.", type: 'age' },
     { them: 'Tu aimes les dragons ?', you: "Oui, j'adore les dragons !", pic: '😍🐉', en: 'Yes, I love dragons!', type: 'like' },
@@ -468,6 +477,12 @@ const SCENES = [
     { them: 'Bon appétit !', you: 'Merci ! Bon appétit, Papa !', pic: '🍽️😋', en: 'Thanks! Enjoy your meal, Papa!', type: 'bonap' },
     { them: "Tu veux de l'eau ?", you: "Oui, s'il te plaît. J'ai soif.", pic: '🥤🙏', en: "Yes, please. I'm thirsty.", type: 'thirsty' },
     { them: 'Encore des pâtes ?', you: "Non merci, j'ai fini !", pic: '🙅✅', en: "No thanks, I've finished!", type: 'nothanks' },
+  ] },
+  { title: '{big}, tu m\'aides ?', who: '🧑‍🦱', pitch: 1.2, steps: [
+    { them: 'Coucou {name} ! Tu as bien dormi ?', you: "Oui, j'ai bien dormi !", pic: '😴👍', en: 'Yes, I slept well!', type: 'slept' },
+    { ask: "Tu peux m'aider, s'il te plaît ?", hint: 'Ask {big} for help.', pic: '❓🙏', en: 'Can you help me, please?', answer: 'Bien sûr ! Avec quoi ?', type: 'askhelp' },
+    { them: 'Tes chaussures ?', you: 'Oui, mes chaussures !', pic: '👟👍', en: 'Yes, my shoes!', type: 'shoes' },
+    { them: 'Voilà ! On va au parc ?', you: 'Oui, on y va !', pic: '🌳🏃', en: "Yes, let's go!", type: 'go' },
   ] },
   { title: 'À la boulangerie', who: '👩‍🍳', pitch: 1.1, steps: [
     { them: "Bonjour ! Qu'est-ce que tu veux ?", you: "Un croissant, s'il vous plaît.", pic: '🥐🙏', en: 'A croissant, please.', type: 'order' },
@@ -492,6 +507,12 @@ const SCENES = [
     { them: "Qu'est-ce que tu fais ?", you: 'Je dessine un dragon !', pic: '🎨🐉', en: "I'm drawing a dragon!", type: 'doing' },
     { them: "Je t'aime ! Gros bisous !", you: 'Moi aussi ! Bisous, Papa !', pic: '❤️😘', en: 'Me too! Kisses, Papa!', type: 'love' },
     { them: 'Au revoir !', you: 'Au revoir, Papa ! À bientôt !', pic: '👋📞', en: 'Goodbye, Papa! See you soon!', type: 'bye' },
+  ] },
+  { title: '{far} au téléphone', who: '🧑‍🎓', pitch: 1.2, steps: [
+    { them: 'Coucou {name} ! Tu me vois ?', you: 'Oui, je te vois !', pic: '📱👀', en: 'Yes, I can see you!', type: 'see' },
+    { them: "Qu'est-ce que tu as fait aujourd'hui ?", you: "J'ai joué dehors !", pic: '🌳⚽', en: 'I played outside!', type: 'did' },
+    { ask: 'Tu reviens quand ?', hint: 'Ask {far}: when are you coming back?', pic: '❓🏠', en: 'When are you coming back?', answer: 'Bientôt ! Pour les vacances !', type: 'askwhen' },
+    { them: 'Tu me manques !', you: 'Toi aussi, tu me manques ! Bisous !', pic: '🥺❤️', en: 'I miss you too! Kisses!', type: 'miss' },
   ] },
   { title: 'Le dragon', who: '🐉', pitch: 0.5, steps: [
     { them: 'Grrr ! Qui es-tu ?', you: 'Je suis {name}, le chevalier !', pic: '🤺📛', en: "I'm {name} the knight!", type: 'name' },
